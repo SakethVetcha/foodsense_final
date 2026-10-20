@@ -1,0 +1,70 @@
+# Life stage: young adult, 19-20 years.
+#
+# Source
+#   ICMR-NIN 2020, adult sedentary rows (the 18+ band; a 19-20 year old sits in it).
+#   Energy: Table 1a -- men 2110 kcal/d, women 1660 kcal/d (sedentary).
+#   Minerals/vitamins: the adult RDA summary (men / women sedentary columns).
+#
+# The upper end of the 5-20 range, included so the planner covers the whole span.
+
+life_stage: young_adult_19_20
+label: "Young adult (19–20 years)"
+age_range: [19, 20]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for adult men/women (sedentary)"
+
+reference_weight_kg: 60.0
+
+daily:
+  energy_kcal: 1885
+  protein_g: 50.0
+  fiber_g: 27.5
+  calcium_mg: 1000
+  magnesium_mg: 405
+  iron_mg: 24
+  zinc_mg: 15.1
+  iodine_ug: 140
+  thiamin_mg: 1.4
+  riboflavin_mg: 1.95
+  niacin_mg: 12.5
+  vitamin_b6_mg: 1.9
+  folate_dfe_ug: 260
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 72
+  vitamin_a_rae_ug: 920
+  vitamin_d_ug: 15
+
+sex_daily:
+  male:
+    energy_kcal: 2110
+    protein_g: 54.0
+    fiber_g: 30
+    magnesium_mg: 440
+    iron_mg: 19
+    zinc_mg: 17
+    riboflavin_mg: 2.0
+    niacin_mg: 14
+    folate_dfe_ug: 300
+    vitamin_c_mg: 80
+    vitamin_a_rae_ug: 1000
+  female:
+    energy_kcal: 1660
+    protein_g: 46.0
+    fiber_g: 25
+    magnesium_mg: 370
+    iron_mg: 29
+    zinc_mg: 13.2
+    riboflavin_mg: 1.9
+    niacin_mg: 11
+    folate_dfe_ug: 220
+    vitamin_c_mg: 65
+    vitamin_a_rae_ug: 840
+
+guidance:
+  visible_fat_g: [20, 25]
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.20, 0.35]
+  sodium_ai_mg: 2000
+  potassium_ai_mg: 3500

@@ -1,0 +1,221 @@
+{
+  "config": {
+    "label_noise_sigma": 0.05,
+    "target_score": 0.7,
+    "auc_thresholds": [
+      0.45,
+      0.55,
+      0.7
+    ],
+    "n_train_meals": 8000,
+    "n_profiles_per_meal": 3,
+    "perturbation_rate": 0.5,
+    "test_size": 0.2,
+    "seed": 42,
+    "lightgbm": {
+      "n_estimators": 600,
+      "learning_rate": 0.05,
+      "num_leaves": 63,
+      "min_child_samples": 20,
+      "subsample": 0.9,
+      "subsample_freq": 1,
+      "colsample_bytree": 0.9,
+      "reg_lambda": 1.0
+    },
+    "xgboost": {
+      "n_estimators": 600,
+      "learning_rate": 0.05,
+      "max_depth": 7,
+      "subsample": 0.9,
+      "colsample_bytree": 0.9,
+      "reg_lambda": 1.0
+    }
+  },
+  "n_features": 41,
+  "n_instances": 24000,
+  "n_source_meals": 8000,
+  "n_train": 19200,
+  "n_test": 4800,
+  "models": {
+    "lightgbm": {
+      "train_seconds": 6.59,
+      "foodcom_holdout": {
+        "rmse": 0.05756805055823384,
+        "mae": 0.04589306393501993,
+        "r2": 0.8631714776026095,
+        "n": 4800,
+        "positive_rate": 0.05229166666666667,
+        "auc": 0.9826909114476365,
+        "auc_at": {
+          "0.45": 0.9589799323177347,
+          "0.55": 0.9602060223792613,
+          "0.70": 0.9826909114476365
+        }
+      },
+      "foodcom_train": {
+        "rmse": 0.03295576936561996,
+        "mae": 0.025995424403059103,
+        "r2": 0.9555032010006901,
+        "n": 19200,
+        "positive_rate": 0.04604166666666667,
+        "auc": 0.9927842926442672,
+        "auc_at": {
+          "0.45": 0.9875649714921438,
+          "0.55": 0.9870135426386208,
+          "0.70": 0.9927842926442672
+        }
+      },
+      "cv": {
+        "rmse_mean": 0.05935061116542691,
+        "rmse_std": 0.0008584429539005362,
+        "n_splits": 5,
+        "fold_rmse": [
+          0.05977,
+          0.05872,
+          0.05817,
+          0.05943,
+          0.06066
+        ]
+      },
+      "nutrition5k": {
+        "rmse": 0.05769951684591433,
+        "mae": 0.04620033451861725,
+        "r2": 0.833369911240778,
+        "n": 4806,
+        "positive_rate": 0.08406158967956721,
+        "auc": 0.9620823792965394,
+        "auc_at": {
+          "0.45": 0.9544212291987112,
+          "0.55": 0.9448678986678543,
+          "0.70": 0.9620823792965394
+        }
+      }
+    },
+    "xgboost": {
+      "train_seconds": 2.86,
+      "foodcom_holdout": {
+        "rmse": 0.058276016060838536,
+        "mae": 0.04636022201268487,
+        "r2": 0.8597853799263089,
+        "n": 4800,
+        "positive_rate": 0.05229166666666667,
+        "auc": 0.9817143823037154,
+        "auc_at": {
+          "0.45": 0.9577294893584735,
+          "0.55": 0.9603826014363561,
+          "0.70": 0.9817143823037154
+        }
+      },
+      "foodcom_train": {
+        "rmse": 0.028377158269323143,
+        "mae": 0.022026092319336762,
+        "r2": 0.9670083782074292,
+        "n": 19200,
+        "positive_rate": 0.04604166666666667,
+        "auc": 0.9947815017703286,
+        "auc_at": {
+          "0.45": 0.9906482319158748,
+          "0.55": 0.9900869511055971,
+          "0.70": 0.9947815017703286
+        }
+      },
+      "nutrition5k": {
+        "rmse": 0.05792059769922369,
+        "mae": 0.046457302354728544,
+        "r2": 0.8320905487901005,
+        "n": 4806,
+        "positive_rate": 0.08406158967956721,
+        "auc": 0.9645683105339158,
+        "auc_at": {
+          "0.45": 0.9539504642426705,
+          "0.55": 0.9435357889501581,
+          "0.70": 0.9645683105339158
+        }
+      }
+    }
+  },
+  "n_nutrition5k_instances": 4806,
+  "lightgbm_feature_importance": [
+    {
+      "feature": "sodium_mg",
+      "gain": 1876
+    },
+    {
+      "feature": "iron_mg",
+      "gain": 1770
+    },
+    {
+      "feature": "energy_kcal",
+      "gain": 1730
+    },
+    {
+      "feature": "calcium_mg",
+      "gain": 1681
+    },
+    {
+      "feature": "share_protein",
+      "gain": 1627
+    },
+    {
+      "feature": "max_item_mass_share",
+      "gain": 1562
+    },
+    {
+      "feature": "fiber_g",
+      "gain": 1510
+    },
+    {
+      "feature": "vitamin_c_mg",
+      "gain": 1490
+    },
+    {
+      "feature": "share_carbohydrate",
+      "gain": 1471
+    },
+    {
+      "feature": "sugars_g",
+      "gain": 1459
+    },
+    {
+      "feature": "vitamin_k_ug",
+      "gain": 1414
+    },
+    {
+      "feature": "saturated_fat_g",
+      "gain": 1345
+    },
+    {
+      "feature": "share_fat",
+      "gain": 1345
+    },
+    {
+      "feature": "glycemic_load",
+      "gain": 1327
+    },
+    {
+      "feature": "potassium_mg",
+      "gain": 1278
+    },
+    {
+      "feature": "protein_g",
+      "gain": 1247
+    },
+    {
+      "feature": "zinc_mg",
+      "gain": 1221
+    },
+    {
+      "feature": "total_mass_g",
+      "gain": 1193
+    },
+    {
+      "feature": "vitamin_b12_ug",
+      "gain": 1113
+    },
+    {
+      "feature": "fat_g",
+      "gain": 1054
+    }
+  ],
+  "total_seconds": 108.0
+}

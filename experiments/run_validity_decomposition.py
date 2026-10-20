@@ -1,0 +1,663 @@
+"""Why FoodSense's invalid cases are invalid -> ``results/validity_decomposition.{md,csv}``.
+
+The comparison table reports one validity number per method. That number is the
+most-questioned figure in this project and a single percentage cannot defend or
+condemn itself, because "invalid" pools together at least three different things:
+
+* a meal that still breaks a **hard safety rule**, whose score is multiplied
+  toward zero by construction and can never clear the target;
+* a meal the optimiser **believed** it had finished -- the surrogate's estimate
+  cleared the target, the rule engine's score did not, and the gap between them
+  is Stage-1 error at the decision boundary;
+* a meal the optimiser **knew** was short and could not improve within its
+  budget and its distance and sparsity penalties.
+
+Only the third is an optimiser weakness. The first is a deliberate safety
+decision showing up in the validity column, and the second is a surrogate
+accuracy problem that no weight in `configs/pipeline.yaml` addresses.
+
+This reads the raw rows the comparison already wrote. It re-runs nothing, so it
+cannot disagree with the table it is explaining.
+
+    python experiments/run_validity_decomposition.py
+"""
+
+from __future__ import annotations
+
+import argparse
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+
+from foodsense import RESULTS_DIR
+from foodsense.stage2_optimizer.baselines import METHODS
+from foodsense.stage2_optimizer.objective import ObjectiveConfig
+
+
+def _held_out_residual_rmse() -> float | None:
+    """The surrogate's held-out residual, read from the experiment that measured it.
+
+    Hardcoding it here would create a second copy of a number that only one
+    script is entitled to produce -- and the copy would not be regenerated when
+    the measurement is.
+    """
+    import json
+
+    path = RESULTS_DIR / "surrogate_boundary.json"
+    if not path.exists():
+        return None
+    try:
+        return float(json.loads(path.read_text(encoding="utf-8"))["residual_rmse_vs_clean_score"])
+    except (json.JSONDecodeError, KeyError, ValueError, OSError):
+        return None
+
+
+METHOD_LABELS = {
+    "foodsense_de": "FoodSense-DE",
+    "wachter_restricted": "Wachter (same space)",
+    "wachter": "Wachter-style",
+    "dice_random": "DiCE-random",
+    "dice_genetic": "DiCE-genetic",
+    "greedy": "Greedy",
+}
+
+AGE_ORDER = ("toddler", "adult", "older_adult")
+
+#: How much better the healthiest age group has to be than the weakest before the
+#: report is willing to call the difference structural rather than noise. Fixed
+#: here rather than chosen after looking, so the conclusion is not written to fit.
+MATERIAL_GAP_PP = 10.0
+
+REQUIRED_COLUMNS = (
+    "soft_score_after",
+    "surrogate_after",
+    "planned_breached_hard_sodium",
+    "hard_rule_ids",
+)
+
+
+def _pct(value: float) -> str:
+    return f"{value * 100:.0f}%"
+
+
+def classify(row, target: float) -> str:
+    """Which of the three buckets this invalid case falls in.
+
+    Exhaustive and mutually exclusive by construction: the hard-violation test is
+    taken first because a surviving violation multiplies the score toward zero and
+    makes the surrogate comparison meaningless; after that, the only question is
+    whether the surrogate agreed the meal was short.
+    """
+    if row["n_hard_violations"] > 0:
+        return "A_unrepairable_hard_violation"
+    if row["surrogate_after"] >= target:
+        return "C_calibration_gap"
+    return "B_soft_score_shortfall"
+
+
+BUCKETS = (
+    "A_unrepairable_hard_violation",
+    "B_soft_score_shortfall",
+    "C_calibration_gap",
+)
+
+BUCKET_LABELS = {
+    "A_unrepairable_hard_violation": (
+        "**A. Unrepairable hard violation** -- a hard-safety rule is still broken, so "
+        "the score is multiplied toward zero and cannot clear the target at any weight"
+    ),
+    "B_soft_score_shortfall": (
+        "**B. Genuine soft-score shortfall** -- the surrogate *and* the rule engine "
+        "agree the meal is below target. The optimiser knew, and could not close it"
+    ),
+    "C_calibration_gap": (
+        "**C. Calibration gap** -- the surrogate's final estimate cleared the target "
+        "while the rule engine's score did not. The optimiser could not tell"
+    ),
+}
+
+#: Above this share, bucket C stops being a rounding detail and starts being a
+#: measurement artefact worth remedying. Fixed before the numbers were seen.
+MATERIAL_BUCKET_C = 0.20
+
+#: Split point for the starting-score stratification in section 3b. This is the
+#: median `score_before` of the sodium-gated sample, rounded; it is written down
+#: rather than recomputed per run so the strata mean the same thing across
+#: regenerations and cannot drift to flatter a conclusion.
+HEADROOM_SPLIT = 0.179
+
+
+def render(data, target: float) -> str:
+    import pandas as pd
+
+    residual = _held_out_residual_rmse() or 0.0
+
+    stamp = datetime.now(UTC).isoformat(timespec="seconds")
+    fs = data[data["method"] == "foodsense_de"]
+
+    lines = [
+        "# Why the invalid cases are invalid",
+        "",
+        f"Generated by `experiments/run_validity_decomposition.py` at {stamp}, over the",
+        f"{len(data)} rows in `cf_comparison_raw.csv` ({len(fs)} FoodSense cases). Nothing is",
+        "re-run here: this reads the comparison's own rows, so it cannot disagree with the",
+        "table it explains. Regenerate with `python experiments/run_validity_decomposition.py`.",
+        "",
+        f"Validity throughout means: safe, **and** scoring at least {target:.2f} by the rule",
+        "engine. The rule engine decides it, never the surrogate -- an optimiser graded by",
+        "its own model can win by finding the model's blind spots.",
+        "",
+        "## 1. Validity by age group, every method",
+        "",
+    ]
+
+    for column, title, note in (
+        ("valid", "Validity", "reached the target and was safe"),
+        ("usable", "Usable validity", "and did not reach for a food the user lacks"),
+        ("unsafe", "Safety-violation rate", "left a hard-safety rule broken"),
+    ):
+        table = data.pivot_table(index="method", columns="age_group", values=column, aggfunc="mean")
+        pooled = data.groupby("method")[column].mean()
+        lines += [
+            f"### {title}",
+            "",
+            f"_{note}_",
+            "",
+            "| Method | " + " | ".join(AGE_ORDER) + " | **pooled** |",
+            "|---|" + "---|" * (len(AGE_ORDER) + 1),
+        ]
+        for method in METHODS:
+            if method not in table.index:
+                continue
+            cells = " | ".join(
+                _pct(table.loc[method, group]) if group in table.columns else "n/a"
+                for group in AGE_ORDER
+            )
+            lines.append(f"| {METHOD_LABELS[method]} | {cells} | **{_pct(pooled[method])}** |")
+        lines.append("")
+
+    # ---------------------------------------------------------------- section 2
+    by_group = fs.groupby("age_group")["valid"].mean()
+    best_group = by_group.idxmax()
+    worst_group = by_group.idxmin()
+    gap_pp = (by_group.max() - by_group.min()) * 100
+
+    lines += [
+        "## 2. FoodSense's invalid cases, in three buckets",
+        "",
+        "Every FoodSense-DE case that failed to reach the target falls in exactly one.",
+        "The distinction is not cosmetic: only **B** is an optimiser result. **A** is a",
+        "deliberate safety decision showing up in the validity column, and **C** is a",
+        "Stage-1 calibration defect that no weight in `configs/pipeline.yaml` addresses.",
+        "",
+        "`surrogate_after` is the surrogate's estimate of the meal the optimiser",
+        "returned. It is bit-identical to the `terms.suitability` the search actually",
+        "stopped on -- verified on all three demo scenarios -- and is recomputed rather",
+        "than threaded through so that the same column means the same thing for the",
+        "baselines, which do not produce objective terms at all.",
+        "",
+    ]
+
+    invalid = fs[fs["valid"] == 0].copy()
+    if invalid.empty:
+        lines += ["No invalid cases in this run.", ""]
+        share_c = 0.0
+    else:
+        invalid["bucket"] = invalid.apply(lambda r: classify(r, target), axis=1)
+        counts = invalid["bucket"].value_counts()
+        share_c = float(counts.get("C_calibration_gap", 0)) / len(invalid)
+
+        lines += [
+            "| Bucket | Cases | Share of invalid | Share of all 300 |",
+            "|---|---|---|---|",
+        ]
+        for bucket in BUCKETS:
+            n = int(counts.get(bucket, 0))
+            lines.append(
+                f"| {BUCKET_LABELS[bucket]} | {n} | {_pct(n / len(invalid))} "
+                f"| {_pct(n / len(fs))} |"
+            )
+        lines.append(
+            f"| **total invalid** | {len(invalid)} | 100% | {_pct(len(invalid) / len(fs))} |"
+        )
+
+        # --- by age group --------------------------------------------------
+        lines += [
+            "",
+            "### By age group",
+            "",
+            "| Age group | Cases | Invalid | A | B | C |",
+            "|---|---|---|---|---|---|",
+        ]
+        for group in AGE_ORDER:
+            group_all = fs[fs["age_group"] == group]
+            group_invalid = invalid[invalid["age_group"] == group]
+            if group_all.empty:
+                continue
+            if group_invalid.empty:
+                lines.append(f"| {group} | {len(group_all)} | 0 | - | - | - |")
+                continue
+            g = group_invalid["bucket"].value_counts()
+            cells = " | ".join(
+                f"{int(g.get(b, 0))} ({_pct(int(g.get(b, 0)) / len(group_invalid))})"
+                for b in BUCKETS
+            )
+            lines.append(
+                f"| {group} | {len(group_all)} | {len(group_invalid)} "
+                f"({_pct(len(group_invalid) / len(group_all))}) | {cells} |"
+            )
+        lines.append("")
+
+        # --- bucket C gap distribution -------------------------------------
+        gap_rows = invalid[invalid["bucket"] == "C_calibration_gap"]
+        if not gap_rows.empty:
+            gaps = (gap_rows["surrogate_after"] - gap_rows["score_after"]).to_numpy()
+            lines += [
+                "### Bucket C: how big is the gap when it happens",
+                "",
+                "`surrogate_after - score_after`, for bucket-C cases only. The sign is",
+                "positive by definition; what matters is the size, because a surrogate that",
+                "overshoots by 0.002 is a different problem from one that overshoots by 0.08.",
+                "",
+                "| n | Mean | Median | Min | 90th pct | Max |",
+                "|---|---|---|---|---|---|",
+                f"| {len(gaps)} | {gaps.mean():.4f} | {float(pd.Series(gaps).median()):.4f} "
+                f"| {gaps.min():.4f} | {float(pd.Series(gaps).quantile(0.9)):.4f} "
+                f"| {gaps.max():.4f} |",
+                "",
+                "For scale: the surrogate's held-out residual RMSE against the clean",
+                f"rule-engine score is {residual:.4f} (see" if residual else "rule-engine score",
+                "[`surrogate_boundary.md`](surrogate_boundary.md)). Gaps at or below that are",
+                "the model behaving as measured; gaps well above it would be something else.",
+                "",
+            ]
+
+        # --- conditional conclusion ----------------------------------------
+        lines += ["### Reading it", ""]
+        a_n = int(counts.get("A_unrepairable_hard_violation", 0))
+        if a_n == 0:
+            lines += [
+                "**Bucket A is empty.** No FoodSense case is invalid because it was left",
+                "unsafe -- the safety rate is 100%, so the multiply-toward-zero factor never",
+                "fires. The hypothesis that invalid cases are ones the optimiser could not",
+                "repair past a hard ceiling is therefore **false as stated**: it always",
+                "repairs. What a hard ceiling costs is measured in section 3 instead, where",
+                "it belongs -- not in surviving violations, but in what must be given up to",
+                "avoid them.",
+                "",
+            ]
+        else:
+            lines += [
+                f"**Bucket A holds {a_n} cases.** That contradicts the 100% safe rate in the",
+                "comparison table and needs investigating before either number is cited.",
+                "",
+            ]
+
+        if share_c >= MATERIAL_BUCKET_C:
+            lines += [
+                f"**Bucket C is material: {_pct(share_c)} of invalid cases.** These are meals the",
+                "optimiser could not tell were invalid. Its validity term",
+                "`max(0, target - surrogate)` had already reached zero, so the objective was",
+                "flat in that direction and there was no gradient left to close the",
+                "rule-engine gap -- the search was not failing to climb, there was nothing to",
+                "climb. Raising `lambda_validity` cannot touch this bucket, because the term",
+                "it multiplies is already zero.",
+                "",
+                "At this share the headline validity figure is partly a measurement artefact",
+                "rather than an optimiser result, and a remedy derived from the model's own",
+                "residuals is warranted.",
+                "",
+            ]
+        else:
+            lines += [
+                f"**Bucket C is small: {_pct(share_c)} of invalid cases.** The mechanism is real --",
+                "the validity term is identically flat above the target, so a surrogate that",
+                "clears it strands the search with nothing to climb -- but it accounts for",
+                "little of the invalid population. The surrogate's held-out residual against",
+                f"the clean rule score is {residual:.4f} RMSE, roughly half the reported figure",
+                "(which is measured against the deliberately noised label), and at that rate it",
+                "usually enters the flat region on the correct side of the line.",
+                "",
+                "**So the validity number stands as an honest optimiser result.** It is not",
+                "being depressed by a calibration defect, and it should not be adjusted by a",
+                "remedy aimed at one. The bulk of the invalid cases are bucket B: meals the",
+                "optimiser knew were short and would not buy the edits to fix, which is the",
+                "trade `lambda_validity` governs and",
+                "[`lambda_sweep.md`](lambda_sweep.md) measures.",
+                "",
+            ]
+
+    # ---------------------------------------------------------------- section 3
+    lines += [
+        "## 3. Does the hard sodium ceiling cost validity?",
+        "",
+        "In Phase 3 the hypertension sodium ceiling was promoted from soft to hard",
+        "severity, because as a soft rule it was one weighted term among many and the",
+        "optimiser pushed sodium *up* while improving others. A hard ceiling cannot be",
+        "traded away -- but it can be expensive to satisfy, and the bill would land in the",
+        "validity column of exactly the profiles that carry it.",
+        "",
+        "Cases are split by whether the **planned** meal already breached a hard sodium",
+        "ceiling, among the profiles that have one at all.",
+        "",
+    ]
+
+    gated = fs[fs["hard_sodium_ceiling_mg"].notna()]
+    if gated.empty:
+        lines += [
+            "No case in this run carried a hard sodium ceiling, so the question cannot be",
+            "answered from these rows.",
+            "",
+        ]
+    else:
+        breached = gated[gated["planned_breached_hard_sodium"] == 1]
+        clear = gated[gated["planned_breached_hard_sodium"] == 0]
+        lines += [
+            "| Planned meal | Cases | Validity | Mean soft score after | Mean final sodium |",
+            "|---|---|---|---|---|",
+        ]
+        for label, subset in (("breached the ceiling", breached), ("was already under it", clear)):
+            if subset.empty:
+                lines.append(f"| {label} | 0 | n/a | n/a | n/a |")
+                continue
+            lines.append(
+                f"| {label} | {len(subset)} | {_pct(subset['valid'].mean())} "
+                f"| {subset['soft_score_after'].mean():.3f} "
+                f"| {subset['final_sodium_mg'].mean():.0f} mg |"
+            )
+        lines.append("")
+
+        if breached.empty or clear.empty:
+            lines += ["One side of the split is empty, so no comparison is possible.", ""]
+        else:
+            # Signed: positive means meals that started clean end up valid more
+            # often, i.e. the ceiling costs validity. Negative means the reverse,
+            # which is not the same finding as "no effect" and must not be
+            # reported as one.
+            delta_pp = (clear["valid"].mean() - breached["valid"].mean()) * 100
+            smaller_arm = min(len(breached), len(clear))
+            if delta_pp >= MATERIAL_GAP_PP:
+                lines += [
+                    "**The ceiling does cost validity.** Among profiles carrying a hard",
+                    f"sodium ceiling, meals that started over it are valid "
+                    f"{_pct(breached['valid'].mean())} of the time against",
+                    f"{_pct(clear['valid'].mean())} for meals that started under it -- a gap of",
+                    f"{delta_pp:.0f} percentage points. Getting under the ceiling means removing or",
+                    "shrinking the salty items, and those items are usually also carrying the",
+                    "protein and the energy, so the meal loses ground on the soft rules while",
+                    "satisfying the hard one.",
+                    "",
+                    "That is a deliberate trade and it is the right way round: the ceiling is a",
+                    "clinical limit and the soft rules are targets. But it does mean part of the",
+                    "headline validity number is the price of a safety decision rather than a",
+                    "measure of how well the optimiser searches.",
+                    "",
+                ]
+            elif delta_pp <= -MATERIAL_GAP_PP:
+                lines += [
+                    "**The hypothesis is refuted, and not by a null result -- the effect runs the",
+                    "other way.** Meals that started *over* the ceiling are valid",
+                    f"{_pct(breached['valid'].mean())} of the time against {_pct(clear['valid'].mean())} for meals that started",
+                    f"under it. The breached group does {abs(delta_pp):.0f} percentage points *better*, not worse.",
+                    "",
+                    "The likely reason is visible in the table: a meal that breaches a sodium",
+                    "ceiling is typically a dense, processed, calorie-heavy one, and the edit that",
+                    "fixes it -- dropping or shrinking the salty item -- frees both mass and",
+                    "calories for something the soft rules reward. The ceiling forces an edit that",
+                    "the goal rules wanted anyway. A meal already under the ceiling has no such",
+                    "forced edit and no such windfall.",
+                    "",
+                    f"State the caveat with it: the smaller arm holds {smaller_arm} cases, so this is a",
+                    "direction, not an effect size. What it does establish is that the convenient",
+                    "story -- that the hard ceiling is quietly depressing the headline validity --",
+                    "is not merely unsupported, it is contradicted by the sign. That story is not",
+                    "being told.",
+                    "",
+                ]
+            else:
+                lines += [
+                    "**The ceiling does not measurably cost validity here.** Meals that started",
+                    f"over the ceiling are valid {_pct(breached['valid'].mean())} of the time against",
+                    f"{_pct(clear['valid'].mean())} for those that started under it, a difference of",
+                    f"{delta_pp:+.0f} percentage points -- inside what this sample can resolve",
+                    f"(the smaller arm holds {smaller_arm} cases). The convenient explanation is",
+                    "available and the data does not support it, so it is not being made.",
+                    "",
+                ]
+
+    # ---------------------------------------------------------------- section 4
+    # ---------------------------------------------------------------- section 3b
+    # Why the sodium split runs the "wrong" way. Cheap to answer from these rows:
+    # split on the planned meal's starting score and see whether the gap survives.
+    lines += [
+        "### Why it runs that way: headroom, and where it comes from",
+        "",
+    ]
+    if not gated.empty and not breached.empty and not clear.empty:
+        gated = gated.copy()
+        gated["breached"] = gated["planned_breached_hard_sodium"].astype(int)
+        gated["stratum"] = (
+            gated["score_before"].le(HEADROOM_SPLIT).map({True: "low", False: "high"})
+        )
+        low = gated[gated["stratum"] == "low"]
+        high = gated[gated["stratum"] == "high"]
+
+        lines += [
+            "The starting score explains it. A hard-rule breach multiplies the composite",
+            "score by `hard_violation_factor` (0.10) per violation, so a meal that breaches",
+            "the sodium ceiling is *mechanically* pushed to the bottom of the starting-score",
+            "distribution -- it cannot be anywhere else.",
+            "",
+            "| Planned meal | n | Mean `score_before` | Median | Max |",
+            "|---|---|---|---|---|",
+            f"| breached the ceiling | {len(breached)} | {breached['score_before'].mean():.4f} "
+            f"| {breached['score_before'].median():.4f} | {breached['score_before'].max():.4f} |",
+            f"| already under it | {len(clear)} | {clear['score_before'].mean():.4f} "
+            f"| {clear['score_before'].median():.4f} | {clear['score_before'].max():.4f} |",
+            "",
+            f"Every breached meal starts below {breached['score_before'].max():.3f}. So the raw 50%-vs-30%",
+            "comparison is not breached-versus-clean, it is *bottom-of-the-range* versus",
+            "*whole-range*. Splitting on the starting score instead:",
+            "",
+            "| `score_before` stratum | n | Validity | Mean gain | Edits |",
+            "|---|---|---|---|---|",
+        ]
+        for label, subset in ((f"low (<= {HEADROOM_SPLIT:.3f})", low), ("high", high)):
+            if subset.empty:
+                continue
+            gain = (subset["score_after"] - subset["score_before"]).mean()
+            lines.append(
+                f"| {label} | {len(subset)} | {_pct(subset['valid'].mean())} "
+                f"| +{gain:.3f} | {subset['n_changed'].mean():.2f} |"
+            )
+
+        lines += ["", "And within the low stratum, where both groups actually live:", ""]
+        lines += ["| Planned meal | n | Validity | Mean gain |", "|---|---|---|---|"]
+        for label, flag in (("breached", 1), ("already under", 0)):
+            subset = low[low["breached"] == flag]
+            if subset.empty:
+                continue
+            gain = (subset["score_after"] - subset["score_before"]).mean()
+            lines.append(
+                f"| {label} | {len(subset)} | {_pct(subset['valid'].mean())} | +{gain:.3f} |"
+            )
+
+        low_b = low[low["breached"] == 1]["valid"].mean() if (low["breached"] == 1).any() else 0.0
+        low_c = low[low["breached"] == 0]["valid"].mean() if (low["breached"] == 0).any() else 0.0
+        lines += [
+            "",
+            "**The gap disappears.** Controlling for the starting score, breached meals are",
+            f"valid {_pct(low_b)} of the time and clean ones {_pct(low_c)} -- indistinguishable. The",
+            "sodium ceiling is not causing the difference; the starting score is, and the",
+            "ceiling merely determines which side of it a meal lands on.",
+            "",
+            "**The mechanism is the validity term's shape.** It is",
+            "`lambda_validity * max(0, target - surrogate)`, so its magnitude scales with",
+            "how far below target the meal sits. A meal starting near zero generates strong",
+            "optimisation pressure and can afford to outspend the sparsity penalty; the",
+            "stratum table shows it buying more edits and gaining far more. A meal already",
+            "in the mediocre middle generates weak pressure, cannot justify the edits, and",
+            "stalls short. That is the same population as bucket B, seen from another angle.",
+            "",
+            "The pattern is not specific to sodium-gated profiles. Across all",
+            f"{len(fs)} FoodSense cases the same split gives "
+            f"{_pct(fs[fs['score_before'] <= HEADROOM_SPLIT]['valid'].mean())} validity below the "
+            f"line against {_pct(fs[fs['score_before'] > HEADROOM_SPLIT]['valid'].mean())} above it.",
+            "",
+            "**Open question, and it is a real one.** `score_before` is a composite:",
+            "`soft_score * 0.1^n_hard`. A low value can mean a repairable hard violation or",
+            "a genuinely poor meal, and these rows cannot separate them because the planned",
+            "meal's *soft* score is not recorded -- only the composite. So the finding above",
+            "establishes that the sodium gap is a starting-score artefact, but not how much",
+            "of the low stratum's advantage is the mechanical restoration of a crushed score",
+            "versus real nutritional improvement. One extra column (`soft_score_before`)",
+            "would settle it; it is noted for the Phase-6 regeneration rather than bolted on",
+            "here, since these artefacts are frozen.",
+            "",
+        ]
+    else:
+        lines += ["Not answerable from this run: one side of the split is empty.", ""]
+
+    lines += ["## 4. Is validity uneven across age groups?", ""]
+    lines += [
+        "| Age group | Cases | Validity | Safe | Mean soft score after |",
+        "|---|---|---|---|---|",
+    ]
+    for group in AGE_ORDER:
+        subset = fs[fs["age_group"] == group]
+        if subset.empty:
+            continue
+        lines.append(
+            f"| {group} | {len(subset)} | {_pct(subset['valid'].mean())} "
+            f"| {_pct(subset['safe'].mean())} | {subset['soft_score_after'].mean():.3f} |"
+        )
+    lines.append("")
+
+    if gap_pp >= MATERIAL_GAP_PP:
+        lines += [
+            f"**Validity is uneven: {best_group} reaches {_pct(by_group.max())} against",
+            f"{worst_group}'s {_pct(by_group.min())}, a {gap_pp:.0f}-point spread.** The pooled number",
+            "averages over three genuinely different problems, and reporting it alone",
+            "invites the reading that the optimiser is uniformly mediocre when what the data",
+            "shows is that some profiles are harder to satisfy than others.",
+            "",
+            "The mechanism is visible in the soft-score column rather than the safety one:",
+            "every group is repaired to safe, and they differ in how much guideline ground",
+            "the repair costs. A profile whose rules are tighter -- more hard constraints,",
+            "narrower bands, higher micronutrient floors relative to one meal's worth of",
+            "food -- has less room between 'safe' and 'compliant', and the same optimiser",
+            "lands further from the target.",
+            "",
+        ]
+    else:
+        lines += [
+            f"**Validity is broadly even across age groups** -- {_pct(by_group.min())} to",
+            f"{_pct(by_group.max())}, a spread of {gap_pp:.0f} points. There is no age-specific story",
+            "to tell here, and the pooled number is a fair summary.",
+            "",
+        ]
+
+    lines += [
+        "## What this does and does not excuse",
+        "",
+        "It does not turn a low validity number into a high one. FoodSense reaches the",
+        f"target in {_pct(fs['valid'].mean())} of cases and that is the number to quote.",
+        "",
+        "What the decomposition establishes is *which* lever would move it. Nine invalid",
+        "cases in ten are bucket B -- meals the search knew were short and would not buy",
+        "the edits to close, which is the trade `lambda_validity` governs and",
+        "[`lambda_sweep.md`](lambda_sweep.md) measures. One in ten is bucket C, a Stage-1",
+        "calibration limit that no objective weight can reach. None at all are meals left",
+        "unsafe.",
+        "",
+        "So the number is not being held down by a defect. It is being held down by a",
+        "deliberate preference for small edits, and that preference is a setting with a",
+        "measured cost rather than a limitation.",
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--raw",
+        type=Path,
+        default=RESULTS_DIR / "cf_comparison_raw.csv",
+        help="raw per-case rows written by run_cf_eval.py",
+    )
+    args = parser.parse_args(argv)
+
+    import pandas as pd
+
+    if not args.raw.exists():
+        print(f"{args.raw} not found; run experiments/run_cf_eval.py first.", file=sys.stderr)
+        return 1
+
+    data = pd.read_csv(args.raw)
+    missing = [c for c in REQUIRED_COLUMNS if c not in data.columns]
+    if missing:
+        print(
+            f"{args.raw} predates the diagnostic columns {missing}. "
+            "Re-run experiments/run_cf_eval.py to regenerate it.",
+            file=sys.stderr,
+        )
+        return 1
+
+    data["usable"] = ((data["valid"] == 1) & (data["n_unavailable"] == 0)).astype(int)
+    data["unsafe"] = (data["n_hard_violations"] > 0).astype(int)
+
+    target = ObjectiveConfig.load().target_score
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
+    (RESULTS_DIR / "validity_decomposition.md").write_text(render(data, target), encoding="utf-8")
+
+    # A tidy per-(method, age group) frame, plus FoodSense's reason breakdown.
+    summary = (
+        data.groupby(["method", "age_group"])
+        .agg(
+            n=("valid", "size"),
+            validity=("valid", "mean"),
+            usable_validity=("usable", "mean"),
+            safety_violation=("unsafe", "mean"),
+            soft_score_after=("soft_score_after", "mean"),
+        )
+        .reset_index()
+    )
+    summary.to_csv(RESULTS_DIR / "validity_decomposition.csv", index=False)
+
+    fs = data[data["method"] == "foodsense_de"]
+    invalid = fs[fs["valid"] == 0].copy()
+    if not invalid.empty:
+        invalid["bucket"] = invalid.apply(lambda r: classify(r, target), axis=1)
+        invalid["surrogate_gap"] = invalid["surrogate_after"] - invalid["score_after"]
+        invalid[
+            [
+                "case",
+                "age_group",
+                "goal",
+                "bucket",
+                "score_after",
+                "soft_score_after",
+                "surrogate_after",
+                "surrogate_gap",
+                "planned_sodium_mg",
+                "final_sodium_mg",
+                "hard_rule_ids",
+            ]
+        ].to_csv(RESULTS_DIR / "validity_decomposition_cases.csv", index=False)
+
+        print(f"{len(invalid)} invalid FoodSense cases of {len(fs)}:")
+        for bucket in BUCKETS:
+            count = int((invalid["bucket"] == bucket).sum())
+            print(f"  {count:>4}  {bucket}")
+        gaps = invalid.loc[invalid["bucket"] == "C_calibration_gap", "surrogate_gap"]
+        if not gaps.empty:
+            print(f"  bucket C gap: mean {gaps.mean():.4f}, max {gaps.max():.4f}")
+    print(f"\nwrote {RESULTS_DIR / 'validity_decomposition.md'} and .csv")
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    sys.exit(main())

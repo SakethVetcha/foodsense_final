@@ -1,0 +1,48 @@
+# Life stage: child, 7-9 years.
+#
+# Source
+#   ICMR-NIN 2020, the 7-9 y group.
+#   Energy: Table 1a (1700 kcal/d, moderate activity).
+#   Protein/fibre/minerals/vitamins: RDA summary table.
+#
+# Sex-neutral at this stage.
+
+life_stage: child_7_9
+label: "Child (7–9 years)"
+age_range: [7, 9]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for children 7-9 y"
+
+reference_weight_kg: 25.3
+
+daily:
+  energy_kcal: 1700
+  protein_g: 23.0
+  fiber_g: 26
+  calcium_mg: 650
+  magnesium_mg: 175
+  iron_mg: 15
+  zinc_mg: 5.9
+  iodine_ug: 90
+  thiamin_mg: 1.1
+  riboflavin_mg: 1.6
+  niacin_mg: 11
+  vitamin_b6_mg: 1.5
+  folate_dfe_ug: 170
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 45
+  vitamin_a_rae_ug: 630
+  vitamin_d_ug: 15
+
+sex_daily:
+  male: {}
+  female: {}
+
+guidance:
+  visible_fat_g: [25, 30]
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.25, 0.35]
+  sodium_ai_mg: 1611
+  potassium_ai_mg: 2820

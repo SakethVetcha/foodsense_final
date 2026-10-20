@@ -1,0 +1,23 @@
+{
+  "dice_random": {
+    "evaluation_budget_exhausted": 125
+  },
+  "wachter": {
+    "plateaued_without_validity": 184,
+    "valid_and_plateaued": 102,
+    "evaluation_budget": 14
+  },
+  "wachter_restricted": {
+    "plateaued_without_validity": 185,
+    "valid_and_plateaued": 106,
+    "evaluation_budget": 9
+  },
+  "foodsense_de": {
+    "evaluation_budget": 7,
+    "plateaued_without_validity": 207,
+    "valid_and_plateaued": 86
+  },
+  "dice_genetic": {
+    "evaluation_budget_exhausted": 300
+  }
+}

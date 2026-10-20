@@ -1,0 +1,56 @@
+# Life stage: child, 5-6 years.
+#
+# Source
+#   ICMR-NIN 2020, "Recommended Dietary Allowances (RDA) and Estimated Average
+#   Requirements (EAR) for Indians" -- the 4-6 y group. A 5-6 year old falls
+#   inside that band, so its values are used as published.
+#   Energy: Table 1a (1360 kcal/d, children 4-6 y, moderate activity).
+#   Protein/fibre/minerals/vitamins: the RDA summary table (page 13 onward).
+#
+# Dietary fibre is an Adequate Intake (AI) in the ICMR table, not an RDA.
+#
+# This band has no sex split: the ICMR 4-6 y row is sex-neutral.
+
+life_stage: child_5_6
+label: "Child (5–6 years)"
+age_range: [5, 6]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for children 4-6 y"
+
+#: Reference body weight from Table 1b, used for per-kg checks and display.
+reference_weight_kg: 18.3
+
+#: Sex-independent reference intake. Keys are FoodSense nutrient names.
+daily:
+  energy_kcal: 1360
+  protein_g: 16.0
+  fiber_g: 20
+  calcium_mg: 550
+  magnesium_mg: 125
+  iron_mg: 11
+  zinc_mg: 4.5
+  iodine_ug: 90
+  thiamin_mg: 0.9
+  riboflavin_mg: 1.3
+  niacin_mg: 9
+  vitamin_b6_mg: 1.2
+  folate_dfe_ug: 135
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 35
+  vitamin_a_rae_ug: 510
+  vitamin_d_ug: 15           # 600 IU
+
+#: No sex difference at this stage; present so the loader shape is uniform.
+sex_daily:
+  male: {}
+  female: {}
+
+#: Composition guidance (ICMR-NIN 2020).
+guidance:
+  visible_fat_g: [20, 25]     # cooking oil / ghee, g/day
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.25, 0.35]
+  sodium_ai_mg: 1290          # scaled from the 2000 mg adult AI by energy
+  potassium_ai_mg: 2255

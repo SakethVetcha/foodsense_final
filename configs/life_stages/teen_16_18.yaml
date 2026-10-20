@@ -1,0 +1,74 @@
+# Life stage: late adolescent, 16-18 years.
+#
+# Source
+#   ICMR-NIN 2020, the boys / girls 16-18 y rows.
+#   Energy: Table 1a -- boys 3320 kcal/d, girls 2500 kcal/d.
+#
+# The widest energy gap of any band (820 kcal), and the peak of the iron
+# requirement for girls (32 mg). Protein for boys (55 g) is near the adult value.
+
+life_stage: teen_16_18
+label: "Late adolescent (16–18 years)"
+age_range: [16, 18]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for boys/girls 16-18 y"
+
+reference_weight_kg: 60.0
+
+daily:
+  energy_kcal: 2910
+  protein_g: 50.5
+  fiber_g: 44
+  calcium_mg: 1050
+  magnesium_mg: 410
+  iron_mg: 29
+  zinc_mg: 15.9
+  iodine_ug: 140
+  thiamin_mg: 1.95
+  riboflavin_mg: 2.7
+  niacin_mg: 19.5
+  vitamin_b6_mg: 2.65
+  folate_dfe_ug: 305
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 77
+  vitamin_a_rae_ug: 930
+  vitamin_d_ug: 15
+
+sex_daily:
+  male:
+    energy_kcal: 3320
+    protein_g: 55.0
+    fiber_g: 50
+    magnesium_mg: 440
+    iron_mg: 26
+    zinc_mg: 17.6
+    thiamin_mg: 2.2
+    riboflavin_mg: 3.1
+    niacin_mg: 22
+    vitamin_b6_mg: 3.0
+    folate_dfe_ug: 340
+    vitamin_c_mg: 85
+    vitamin_a_rae_ug: 1000
+  female:
+    energy_kcal: 2500
+    protein_g: 46.0
+    fiber_g: 38
+    magnesium_mg: 380
+    iron_mg: 32
+    zinc_mg: 14.2
+    thiamin_mg: 1.7
+    riboflavin_mg: 2.3
+    niacin_mg: 17
+    vitamin_b6_mg: 2.3
+    folate_dfe_ug: 270
+    vitamin_c_mg: 70
+    vitamin_a_rae_ug: 860
+
+guidance:
+  visible_fat_g: [35, 50]
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.20, 0.35]
+  sodium_ai_mg: 2000
+  potassium_ai_mg: 3500

@@ -1,0 +1,75 @@
+# Life stage: adolescent, 13-15 years.
+#
+# Source
+#   ICMR-NIN 2020, the boys / girls 13-15 y rows.
+#   Energy: Table 1a -- boys 2860 kcal/d, girls 2400 kcal/d.
+#
+# Peak growth spurt. Sex differences widen: boys need more energy, protein and
+# zinc, girls need markedly more iron (30 mg vs 22 mg) and slightly more calcium
+# relative to energy. See configs/life_stages/README.md.
+
+life_stage: teen_13_15
+label: "Adolescent (13–15 years)"
+age_range: [13, 15]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for boys/girls 13-15 y"
+
+reference_weight_kg: 50.0
+
+daily:
+  energy_kcal: 2630
+  protein_g: 44.0
+  fiber_g: 40
+  calcium_mg: 1000
+  magnesium_mg: 342
+  iron_mg: 26
+  zinc_mg: 13.5
+  iodine_ug: 140
+  thiamin_mg: 1.75
+  riboflavin_mg: 2.45
+  niacin_mg: 17.5
+  vitamin_b6_mg: 2.4
+  folate_dfe_ug: 265
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 67
+  vitamin_a_rae_ug: 910
+  vitamin_d_ug: 15
+
+sex_daily:
+  male:
+    energy_kcal: 2860
+    protein_g: 45.0
+    fiber_g: 43
+    magnesium_mg: 345
+    iron_mg: 22
+    zinc_mg: 14.3
+    thiamin_mg: 1.9
+    riboflavin_mg: 2.7
+    niacin_mg: 19
+    vitamin_b6_mg: 2.6
+    folate_dfe_ug: 285
+    vitamin_c_mg: 70
+    vitamin_a_rae_ug: 930
+  female:
+    energy_kcal: 2400
+    protein_g: 43.0
+    fiber_g: 36
+    magnesium_mg: 340
+    iron_mg: 30
+    zinc_mg: 12.8
+    thiamin_mg: 1.6
+    riboflavin_mg: 2.2
+    niacin_mg: 16
+    vitamin_b6_mg: 2.2
+    folate_dfe_ug: 245
+    vitamin_c_mg: 65
+    vitamin_a_rae_ug: 890
+
+guidance:
+  visible_fat_g: [40, 45]
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.20, 0.35]
+  sodium_ai_mg: 2000
+  potassium_ai_mg: 3500

@@ -1,0 +1,76 @@
+# Life stage: pre-adolescent, 10-12 years.
+#
+# Source
+#   ICMR-NIN 2020, the boys / girls 10-12 y rows.
+#   Energy: Table 1a -- boys 2220 kcal/d, girls 2060 kcal/d.
+#
+# This is the first band where sex changes the recommendation. The largest
+# difference is iron: the girls' RDA (28 mg) is far above the boys' (16 mg)
+# because menstrual iron losses begin and the requirement distribution shifts.
+# That gap is exactly why sex has to be an input rather than a footnote.
+#
+# `daily` holds the common values; `sex_daily` overrides the keys that differ.
+
+life_stage: preteen_10_12
+label: "Pre-adolescent (10–12 years)"
+age_range: [10, 12]
+meals_per_day: 4
+
+source: "ICMR-NIN 2020, RDA for boys/girls 10-12 y"
+
+reference_weight_kg: 35.5
+
+daily:
+  energy_kcal: 2140
+  protein_g: 32.5
+  fiber_g: 32
+  calcium_mg: 850
+  magnesium_mg: 245
+  iron_mg: 22
+  zinc_mg: 8.5
+  iodine_ug: 100
+  thiamin_mg: 1.45
+  riboflavin_mg: 2.0
+  niacin_mg: 14.5
+  vitamin_b6_mg: 1.95
+  folate_dfe_ug: 222
+  vitamin_b12_ug: 2.2
+  vitamin_c_mg: 52
+  vitamin_a_rae_ug: 780
+  vitamin_d_ug: 15
+
+sex_daily:
+  male:
+    energy_kcal: 2220
+    protein_g: 32.0
+    fiber_g: 33
+    magnesium_mg: 240
+    iron_mg: 16
+    thiamin_mg: 1.5
+    riboflavin_mg: 2.1
+    niacin_mg: 15
+    vitamin_b6_mg: 2.0
+    folate_dfe_ug: 220
+    vitamin_c_mg: 55
+    vitamin_a_rae_ug: 770
+  female:
+    energy_kcal: 2060
+    protein_g: 33.0
+    fiber_g: 30
+    magnesium_mg: 250
+    iron_mg: 28
+    thiamin_mg: 1.4
+    riboflavin_mg: 1.9
+    niacin_mg: 14
+    vitamin_b6_mg: 1.9
+    folate_dfe_ug: 225
+    vitamin_c_mg: 50
+    vitamin_a_rae_ug: 790
+
+guidance:
+  visible_fat_g: [30, 35]
+  added_sugars_max_energy_share: 0.10
+  saturated_fat_max_energy_share: 0.10
+  total_fat_energy_share: [0.25, 0.35]
+  sodium_ai_mg: 2000   # capped at the WHO/ICMR adult AI
+  potassium_ai_mg: 3500
