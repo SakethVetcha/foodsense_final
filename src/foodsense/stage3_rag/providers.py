@@ -155,6 +155,8 @@ class TemplateProvider(LLMProvider):
             kind = change.get("change_type")
             food = _short(str(change.get("name", "")))
             reason = change.get("reason") or ""
+            source = change.get("source")
+            src_tag = f" [{source}]" if source and source != "USDA" else ""
 
             if kind == "removed":
                 lines.append(f"Leave out the {food.lower()}.")
@@ -176,7 +178,27 @@ class TemplateProvider(LLMProvider):
                     verb = "Increase" if new_q > old_q else "Reduce"
                     lines.append(f"{verb} the {food.lower()} from {old_q:.0f} g to {new_q:.0f} g.")
             if reason:
-                rationale.append(f"{food}: {reason}")
+                rationale.append(f"{food}{src_tag}: {reason}")
+
+        # Data source attribution
+        sources_present = {
+            item.source
+            for item in request.optimized_meal.items
+            if getattr(item, "source", None)
+        }
+        for change in request.changes:
+            if change.get("source"):
+                sources_present.add(change["source"])
+
+        source_labels = []
+        if "USDA" in sources_present:
+            source_labels.append("USDA")
+        if "IFCT_2017" in sources_present:
+            source_labels.append("IFCT 2017")
+        if "COMPOSITE" in sources_present:
+            source_labels.append("Indian Composite Dish Formulations")
+        if source_labels:
+            rationale.append(f"Nutrient calculation data sources: {', '.join(source_labels)}.")
 
         if not lines:
             lines.append("This meal already meets the targets; no changes are needed.")

@@ -98,6 +98,23 @@ export default function MealDiff({ diff }) {
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-baseline gap-x-2">
                     <span className={`font-medium ${style.text}`}>{change.name}</span>
+                    {change.source && (
+                      <span
+                        className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                          change.source === 'IFCT_2017'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : change.source === 'COMPOSITE'
+                            ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                            : 'bg-sky-100 text-sky-800 border border-sky-300'
+                        }`}
+                      >
+                        {change.source === 'IFCT_2017'
+                          ? 'IFCT 2017'
+                          : change.source === 'COMPOSITE'
+                          ? 'Composite'
+                          : 'USDA'}
+                      </span>
+                    )}
                     <span
                       className={`text-[11px] uppercase tracking-wide font-semibold ${style.label}`}
                     >

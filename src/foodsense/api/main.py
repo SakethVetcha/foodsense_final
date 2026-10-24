@@ -47,7 +47,7 @@ from foodsense.api.models import (
     ScenarioRequest,
     ScenarioSummary,
 )
-from foodsense.data.fdc import get_food_db, get_indian_food_db
+from foodsense.data.fdc import get_food_db, get_indian_food_db, get_unified_food_db
 from foodsense.schemas import Meal, PipelineTrace
 
 
@@ -166,22 +166,37 @@ def health() -> HealthResponse:
         n_indian = len(get_indian_food_db().records)
     except Exception:
         n_indian = 0
+    try:
+        n_unified = len(get_unified_food_db().records)
+    except Exception:
+        n_unified = len(db.records) + n_indian
+
     return HealthResponse(
         status="ok",
         version=__version__,
         model_loaded=LIGHTGBM_PATH.exists(),
         n_foods=len(db.records),
         n_indian_foods=n_indian,
+        n_unified_foods=n_unified,
         default_provider="template",
     )
 
 
 @app.get("/api/scenarios", response_model=list[ScenarioSummary])
-def scenarios() -> list[ScenarioSummary]:
+def scenarios(
+    category: str | None = Query(default=None, description="all|original|indian"),
+) -> list[ScenarioSummary]:
     """The built-in demo cases, as the dropdown needs them."""
-    from foodsense.scenarios import SCENARIOS
+    from foodsense.scenarios import ALL_SCENARIOS, INDIAN_SCENARIOS, ORIGINAL_SCENARIOS
 
-    db = get_food_db()
+    db = get_unified_food_db()
+    if category == "all":
+        source_scenarios = ALL_SCENARIOS
+    elif category == "indian":
+        source_scenarios = INDIAN_SCENARIOS
+    else:
+        source_scenarios = ORIGINAL_SCENARIOS
+
     return [
         ScenarioSummary(
             key=key,
@@ -193,8 +208,14 @@ def scenarios() -> list[ScenarioSummary]:
             n_planned_items=len(scenario.planned_meal(db).items),
             n_pantry_items=len(scenario.pantry_meal(db).items),
         )
-        for key, scenario in SCENARIOS.items()
+        for key, scenario in source_scenarios.items()
     ]
+
+
+@app.get("/api/indian-scenarios", response_model=list[ScenarioSummary])
+def indian_scenarios() -> list[ScenarioSummary]:
+    """Demo scenarios specifically demonstrating Indian nutrition and paediatric/glycemic rules."""
+    return scenarios(category="indian")
 
 
 @app.get("/api/providers", response_model=list[ProviderInfo])
@@ -224,15 +245,23 @@ def providers() -> list[ProviderInfo]:
 @app.get("/api/foods", response_model=list[FoodSummary])
 def foods(
     q: str = Query(default="", max_length=100, description="substring or fuzzy name query"),
+    source: str | None = Query(default=None, description="Optional source filter: usda, ifct_2017, composite"),
     limit: int = Query(default=20, ge=1, le=100),
 ) -> list[FoodSummary]:
-    """Autocomplete over the curated database."""
-    db = get_food_db()
-    # search() ranks and returns (record, score) pairs; the score is the matcher's
-    # business, not the UI's.
-    records = (
-        [record for record, _ in db.search(q, limit=limit)] if q.strip() else db.records[:limit]
-    )
+    """Autocomplete over the unified curated database (USDA + IFCT 2017 + Composite dishes)."""
+    db = get_unified_food_db()
+    if q.strip():
+        hits = db.search(q, limit=limit * 2 if source else limit)
+        records = [record for record, _ in hits]
+    else:
+        records = db.records
+
+    if source:
+        src = source.upper()
+        records = [r for r in records if r.source.upper() == src]
+
+    records = records[:limit]
+
     return [
         FoodSummary(
             food_id=r.fdc_id,
@@ -241,6 +270,12 @@ def foods(
             energy_kcal_per_100g=round(r.nutrients_per_100g.energy_kcal, 1),
             allowed_forms=[f.value for f in r.allowed_forms],
             hazard_class=r.hazard_class or None,
+            source=r.source,
+            source_id=r.source_id,
+            diet=r.diet,
+            is_composite=r.is_composite,
+            is_indian=r.is_indian,
+            aliases=list(r.aliases),
         )
         for r in records
     ]
@@ -252,7 +287,7 @@ def foods(
 
 
 @app.post("/api/recommend", response_model=PipelineTrace)
-def recommend(payload: dict[str, Any]) -> PipelineTrace:
+async def recommend(payload: dict[str, Any]) -> PipelineTrace:
     """Run all four stages and return the trace verbatim.
 
     Accepts either shape. Which one was sent is decided by the presence of
@@ -276,14 +311,14 @@ def recommend(payload: dict[str, Any]) -> PipelineTrace:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     if isinstance(request, ScenarioRequest):
-        from foodsense.scenarios import SCENARIOS
+        from foodsense.scenarios import ALL_SCENARIOS
 
-        if request.scenario not in SCENARIOS:
+        if request.scenario not in ALL_SCENARIOS:
             raise HTTPException(
                 status_code=404,
                 detail=(
                     f"Unknown scenario {request.scenario!r}. "
-                    f"Available: {', '.join(sorted(SCENARIOS))}."
+                    f"Available: {', '.join(sorted(ALL_SCENARIOS))}."
                 ),
             )
         return run_scenario(request.scenario, provider=provider, seed=request.seed)
@@ -291,7 +326,7 @@ def recommend(payload: dict[str, Any]) -> PipelineTrace:
     if not request.planned_meal.items:
         raise HTTPException(status_code=422, detail="planned_meal must contain at least one item.")
 
-    db = get_food_db()
+    db = get_unified_food_db()
     unknown = db.unknown_ids(request.planned_meal) + db.unknown_ids(Meal(items=request.pantry))
     if unknown:
         raise HTTPException(
@@ -305,6 +340,22 @@ def recommend(payload: dict[str, Any]) -> PipelineTrace:
         request.pantry,
         provider=provider,
         seed=request.seed,
+        db=db,
+    )
+
+
+@app.post("/api/export")
+async def export_trace(payload: dict[str, Any]) -> Response:
+    """Download a complete recommendation trace as a research JSON artifact."""
+    import json
+
+    trace = await recommend(payload)
+    content = json.dumps(trace.model_dump(mode="json"), indent=2)
+    filename = f"foodsense_trace_{payload.get('scenario', 'custom')}_{trace.seed}.json"
+    return Response(
+        content=content,
+        media_type="application/json",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
@@ -508,6 +559,136 @@ def plan(payload: dict[str, Any], response: Response) -> JSONResponse:
     result = generate_meal_plan(profile, seed=int(payload.get("seed", 42)))
     response.headers["Cache-Control"] = "no-store, private"
     return JSONResponse(content=result.model_dump(), headers={"Cache-Control": "no-store, private"})
+
+
+# ---------------------------------------------------------------------------
+# Research Evaluation, Publication Figures & Data Export Endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.get("/api/research/figures")
+def get_research_figures() -> list[dict[str, Any]]:
+    """Return the metadata manifest for all generated publication figures and exports."""
+    import json
+    from dataclasses import asdict
+    from foodsense.figures import FIGURES_DIR, MANIFEST_PATH, generate_all_figures
+
+    if MANIFEST_PATH.exists():
+        try:
+            with open(MANIFEST_PATH, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+
+    figures = generate_all_figures()
+    return [asdict(f) for f in figures]
+
+
+@app.post("/api/research/generate-figures")
+def api_generate_figures(payload: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    """Regenerate all 300-DPI publication figures, vector SVGs, and data tables.
+
+    If a ``trace`` is supplied, Figure 6 incorporates the specific scenario's nutrient changes.
+    """
+    from dataclasses import asdict
+    from foodsense.figures import generate_all_figures
+    from foodsense.schemas import PipelineTrace
+
+    trace: PipelineTrace | None = None
+    if payload:
+        trace_data = payload.get("trace", payload)
+        if isinstance(trace_data, dict) and "meal_initial" in trace_data:
+            try:
+                trace = PipelineTrace(**trace_data)
+            except Exception:
+                trace = None
+
+    figures = generate_all_figures(trace=trace)
+    return [asdict(f) for f in figures]
+
+
+@app.get("/api/research/download-figure/{filename}")
+def download_figure(filename: str) -> FileResponse:
+    """Download a generated 300-DPI publication figure, vector SVG, data CSV, or full ZIP bundle."""
+    from foodsense.figures import FIGURES_DIR, create_figures_zip
+
+    if ".." in filename or "/" in filename or "\\" in filename:
+        raise HTTPException(status_code=400, detail="Invalid figure filename.")
+
+    file_path = (FIGURES_DIR / filename).resolve()
+    if filename == "foodsense_publication_figures.zip" and not file_path.is_file():
+        create_figures_zip(FIGURES_DIR)
+
+    if not file_path.is_file() or not str(file_path).startswith(str(FIGURES_DIR.resolve())):
+        raise HTTPException(status_code=404, detail=f"Figure artifact '{filename}' not found.")
+
+    media_type = "application/octet-stream"
+    if filename.endswith(".png"):
+        media_type = "image/png"
+    elif filename.endswith(".svg"):
+        media_type = "image/svg+xml"
+    elif filename.endswith(".csv"):
+        media_type = "text/csv"
+    elif filename.endswith(".zip"):
+        media_type = "application/zip"
+    elif filename.endswith(".json"):
+        media_type = "application/json"
+
+    return FileResponse(
+        path=file_path,
+        media_type=media_type,
+        filename=filename,
+        headers={"Cache-Control": "public, max-age=60"},
+    )
+
+
+@app.get("/api/research/eval-data")
+def get_research_eval_data() -> dict[str, Any]:
+    """Return parsed academic benchmark, hyperparameter sweep, and verification evaluation data."""
+    import csv
+    import json
+    from foodsense import RESULTS_DIR
+
+    eval_data: dict[str, Any] = {
+        "cf_comparison": [],
+        "lambda_sweep": [],
+        "surrogate_boundary": {},
+        "verification_eval": {},
+    }
+
+    cf_path = RESULTS_DIR / "cf_comparison.csv"
+    if cf_path.exists():
+        try:
+            with open(cf_path, "r", encoding="utf-8") as f:
+                eval_data["cf_comparison"] = list(csv.DictReader(f))
+        except Exception:
+            pass
+
+    lambda_path = RESULTS_DIR / "lambda_sweep.csv"
+    if lambda_path.exists():
+        try:
+            with open(lambda_path, "r", encoding="utf-8") as f:
+                eval_data["lambda_sweep"] = list(csv.DictReader(f))
+        except Exception:
+            pass
+
+    surr_path = RESULTS_DIR / "surrogate_boundary.json"
+    if surr_path.exists():
+        try:
+            with open(surr_path, "r", encoding="utf-8") as f:
+                eval_data["surrogate_boundary"] = json.load(f)
+        except Exception:
+            pass
+
+    verif_path = RESULTS_DIR / "verification_eval.json"
+    if verif_path.exists():
+        try:
+            with open(verif_path, "r", encoding="utf-8") as f:
+                eval_data["verification_eval"] = json.load(f)
+        except Exception:
+            pass
+
+    return eval_data
 
 
 def _asdict(obj: Any) -> Any:

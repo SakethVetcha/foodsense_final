@@ -24,6 +24,29 @@ const GOALS = [
   { value: 'weight_management', label: 'Weight management' },
 ]
 
+const LIFE_STAGES = [
+  { value: '', label: 'None (Standard guidelines)' },
+  { value: 'child_5_6', label: 'Child (5–6 y, ICMR-NIN)' },
+  { value: 'child_7_9', label: 'Child (7–9 y, ICMR-NIN)' },
+  { value: 'preteen_10_12', label: 'Pre-teen (10–12 y, ICMR-NIN)' },
+  { value: 'teen_13_15', label: 'Teen (13–15 y, ICMR-NIN)' },
+  { value: 'teen_16_18', label: 'Teen (16–18 y, ICMR-NIN)' },
+  { value: 'young_adult_19_20', label: 'Young Adult (19–20 y, ICMR-NIN)' },
+]
+
+const SEX_OPTIONS = [
+  { value: '', label: 'Unspecified' },
+  { value: 'male', label: 'Male' },
+  { value: 'female', label: 'Female' },
+]
+
+const DIET_OPTIONS = [
+  { value: '', label: 'Any' },
+  { value: 'vegetarian', label: 'Vegetarian' },
+  { value: 'eggetarian', label: 'Eggetarian' },
+  { value: 'non_vegetarian', label: 'Non-vegetarian' },
+]
+
 const FLAGS = [
   'hypertension',
   'diabetes',
@@ -93,15 +116,35 @@ function FoodSearch({ onPick, placeholder }) {
                   setResults([])
                   setOpen(false)
                 }}
-                className="w-full text-left px-2 py-1.5 text-sm hover:bg-slate-100"
+                className="w-full text-left px-2.5 py-1.5 text-sm hover:bg-slate-100 flex items-center justify-between"
               >
-                <div className="text-slate-800">{food.name}</div>
-                <div className="text-xs text-slate-500">
-                  {food.category} &middot; {food.energy_kcal_per_100g} kcal/100 g
-                  {food.hazard_class && (
-                    <span className="text-rose-600"> &middot; {food.hazard_class} hazard</span>
-                  )}
+                <div>
+                  <div className="text-slate-800 font-medium">{food.name}</div>
+                  <div className="text-xs text-slate-500">
+                    {food.category} &middot; {food.energy_kcal_per_100g} kcal/100 g
+                    {food.diet && <span className="text-forest-700"> &middot; {food.diet}</span>}
+                    {food.hazard_class && (
+                      <span className="text-rose-600"> &middot; {food.hazard_class} hazard</span>
+                    )}
+                  </div>
                 </div>
+                {food.source && (
+                  <span
+                    className={`text-[10px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                      food.source === 'IFCT_2017'
+                        ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                        : food.source === 'COMPOSITE'
+                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                        : 'bg-sky-100 text-sky-800 border border-sky-200'
+                    }`}
+                  >
+                    {food.source === 'IFCT_2017'
+                      ? 'IFCT 2017'
+                      : food.source === 'COMPOSITE'
+                      ? 'Composite'
+                      : 'USDA'}
+                  </span>
+                )}
               </button>
             </li>
           ))}
@@ -124,6 +167,8 @@ function ItemList({ title, hint, items, setItems, withQuantity }) {
         quantity_g: withQuantity ? 100 : 0,
         form: food.allowed_forms[0],
         allowed_forms: food.allowed_forms,
+        source: food.source || 'USDA',
+        diet: food.diet || '',
       },
     ])
 
@@ -144,9 +189,28 @@ function ItemList({ title, hint, items, setItems, withQuantity }) {
             key={`${item.food_id}-${i}`}
             className="flex items-center gap-2 border border-slate-200 rounded px-2 py-1.5 bg-white"
           >
-            <span className="flex-1 text-sm text-slate-800 truncate" title={item.name}>
-              {item.name}
-            </span>
+            <div className="flex-1 min-w-0 flex items-center gap-1.5 truncate">
+              <span className="text-sm text-slate-800 truncate" title={item.name}>
+                {item.name}
+              </span>
+              {item.source && (
+                <span
+                  className={`text-[9px] font-bold px-1.5 py-0.5 rounded shrink-0 ${
+                    item.source === 'IFCT_2017'
+                      ? 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                      : item.source === 'COMPOSITE'
+                      ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                      : 'bg-sky-100 text-sky-800 border border-sky-200'
+                  }`}
+                >
+                  {item.source === 'IFCT_2017'
+                    ? 'IFCT'
+                    : item.source === 'COMPOSITE'
+                    ? 'Dish'
+                    : 'USDA'}
+                </span>
+              )}
+            </div>
             {withQuantity && (
               <label className="flex items-center gap-1">
                 <input
@@ -261,6 +325,57 @@ export default function CustomBuilder({ value, onChange }) {
               {GOALS.map((g) => (
                 <option key={g.value} value={g.value}>
                   {g.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+
+        <div className="grid sm:grid-cols-3 gap-3 mt-3">
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-forest-700 font-semibold">
+              Life Stage (ICMR-NIN 2020)
+            </span>
+            <select
+              className="mt-1 w-full border border-forest-300 bg-forest-50/40 rounded px-2 py-1.5 text-sm"
+              value={profile.life_stage || ''}
+              onChange={(e) => setProfile({ life_stage: e.target.value || null })}
+            >
+              {LIFE_STAGES.map((ls) => (
+                <option key={ls.value} value={ls.value}>
+                  {ls.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-forest-700 font-semibold">Sex</span>
+            <select
+              className="mt-1 w-full border border-forest-300 bg-forest-50/40 rounded px-2 py-1.5 text-sm"
+              value={profile.sex || ''}
+              onChange={(e) => setProfile({ sex: e.target.value || null })}
+            >
+              {SEX_OPTIONS.map((so) => (
+                <option key={so.value} value={so.value}>
+                  {so.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label className="block">
+            <span className="text-xs uppercase tracking-wide text-forest-700 font-semibold">
+              Dietary Preference
+            </span>
+            <select
+              className="mt-1 w-full border border-forest-300 bg-forest-50/40 rounded px-2 py-1.5 text-sm"
+              value={profile.diet || ''}
+              onChange={(e) => setProfile({ diet: e.target.value || null })}
+            >
+              {DIET_OPTIONS.map((d) => (
+                <option key={d.value} value={d.value}>
+                  {d.label}
                 </option>
               ))}
             </select>

@@ -18,11 +18,15 @@ async function unwrap(response) {
 
 export const getHealth = () => fetch('/api/health').then(unwrap)
 export const getScenarios = () => fetch('/api/scenarios').then(unwrap)
+export const getIndianScenarios = () => fetch('/api/indian-scenarios').then(unwrap)
 export const getProviders = () => fetch('/api/providers').then(unwrap)
 
-/** Type-ahead over the curated USDA database. Local; no network beyond this app. */
-export const searchFoods = (q, limit = 8) =>
-  fetch(`/api/foods?q=${encodeURIComponent(q)}&limit=${limit}`).then(unwrap)
+/** Type-ahead over the unified food database (USDA + IFCT 2017 + Composite dishes). */
+export const searchFoods = (q, limit = 10, source = '') => {
+  const params = new URLSearchParams({ q, limit })
+  if (source) params.set('source', source)
+  return fetch(`/api/foods?${params.toString()}`).then(unwrap)
+}
 
 /**
  * Run the pipeline. `body` is either {scenario} or {profile, planned_meal, pantry}.
@@ -35,6 +39,25 @@ export const recommend = (body) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   }).then(unwrap)
+
+/** Download full research pipeline trace as a reproducible JSON file. */
+export const exportTrace = async (body) => {
+  const res = await fetch('/api/export', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`Export failed: ${res.statusText}`)
+  const blob = await res.blob()
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `foodsense_trace_${body.scenario || 'custom'}.json`
+  document.body.appendChild(a)
+  a.click()
+  window.URL.revokeObjectURL(url)
+  document.body.removeChild(a)
+}
 
 // ---------------------------------------------------------------------------
 // Indian meal planner (ages 5-20)
@@ -104,3 +127,26 @@ export const getBodyMetrics = ({ age_years, sex, height_cm, weight_kg }) =>
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ age_years, sex, height_cm, weight_kg }),
   }).then(unwrap)
+
+// ---------------------------------------------------------------------------
+// Academic Research Evaluation, Publication Figures & Data Exports
+// ---------------------------------------------------------------------------
+
+/** Get publication figure manifest and metadata. */
+export const getResearchFigures = () => fetch('/api/research/figures').then(unwrap)
+
+/** Regenerate publication-ready figures (300-DPI PNGs, vector SVGs, paired CSVs). */
+export const generateResearchFigures = (trace = null) =>
+  fetch('/api/research/generate-figures', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(trace ? { trace } : {}),
+  }).then(unwrap)
+
+/** Fetch empirical research evaluation datasets (baselines, lambda sweep, calibration). */
+export const getResearchEvalData = () => fetch('/api/research/eval-data').then(unwrap)
+
+/** Return the download URL for any generated figure, vector SVG, CSV, or ZIP. */
+export const getFigureDownloadUrl = (filename) =>
+  `/api/research/download-figure/${encodeURIComponent(filename)}`
+

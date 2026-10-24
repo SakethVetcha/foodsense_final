@@ -117,6 +117,12 @@ class FoodSummary(BaseModel):
     energy_kcal_per_100g: float
     allowed_forms: list[str]
     hazard_class: str | None = None
+    source: str = "USDA"
+    source_id: str = ""
+    diet: str = ""
+    is_composite: bool = False
+    is_indian: bool = False
+    aliases: list[str] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -125,6 +131,7 @@ class HealthResponse(BaseModel):
     model_loaded: bool
     n_foods: int
     n_indian_foods: int = 0
+    n_unified_foods: int = 0
     default_provider: str
 
 

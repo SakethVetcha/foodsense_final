@@ -133,6 +133,7 @@ const SAMPLE_INDIAN_FOODS = [
 function stubFetch(overrides = {}) {
   const routes = {
     '/api/scenarios': SCENARIOS,
+    '/api/indian-scenarios': [],
     '/api/providers': PROVIDERS,
     '/api/health': HEALTH,
     '/api/life-stages': LIFE_STAGES,

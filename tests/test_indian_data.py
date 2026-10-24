@@ -12,7 +12,7 @@ import pytest
 from foodsense import INDIA_FOOD_DB_PARQUET
 from foodsense.data.fdc import get_indian_food_db
 from foodsense.data.indian_dishes import DISHES
-from foodsense.data.indian_food import curate_indian_food_db, load_ifct_table
+from foodsense.data.indian_food import IFCT_CSV, curate_indian_food_db, load_ifct_table
 from foodsense.schemas import NUTRIENTS
 
 pytestmark = pytest.mark.skipif(
@@ -123,6 +123,10 @@ class TestCuration:
         for record in indian_db.records:
             assert any(t.startswith("diet_") for t in record.tags), record.name
 
+    @pytest.mark.skipif(
+        not IFCT_CSV.exists(),
+        reason="IFCT raw CSV not downloaded; run build_indian_food_db --download",
+    )
     def test_regenerating_is_deterministic(self):
         a, _ = curate_indian_food_db(load_ifct_table())
         b, _ = curate_indian_food_db(load_ifct_table())

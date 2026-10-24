@@ -7,6 +7,22 @@ import pytest
 from foodsense import PROJECT_ROOT, SEED
 from foodsense.schemas import AgeGroup, Form, Goal, Meal, MealItem, UserProfile
 
+# On Windows, LightGBM's native C library can fail with an access violation if
+# another C library (such as scikit-learn's vcomp140.dll) initializes OpenMP first.
+# Performing a dummy prediction here initializes LightGBM's OpenMP runtime safely.
+try:
+    from foodsense import MODELS_DIR
+
+    _lgb_path = MODELS_DIR / "stage1_lightgbm.txt"
+    if _lgb_path.exists():
+        import lightgbm as _lgb
+        import numpy as _np
+
+        _dummy = _lgb.Booster(model_file=str(_lgb_path))
+        _dummy.predict(_np.zeros((1, 41), dtype=_np.float64))
+except Exception:
+    pass
+
 
 @pytest.fixture(scope="session")
 def project_root():

@@ -40,9 +40,56 @@ __all__ = [
     "FoodDB",
     "FoodRecord",
     "FoodDatabaseMissingError",
+    "INDIAN_ALIASES",
     "get_food_db",
     "get_indian_food_db",
+    "get_unified_food_db",
 ]
+
+#: Curated aliases for search matching Indian staples and dishes
+INDIAN_ALIASES: dict[str, tuple[str, ...]] = {
+    "X001": ("idli", "steamed rice cake", "south indian idli"),
+    "X002": ("plain dosa", "dosa", "dosai", "crispy rice pancake"),
+    "X003": ("vegetable upma", "upma", "rava upma"),
+    "X004": ("poha", "flattened rice", "aval", "chuda", "kanda poha"),
+    "X005": ("chapati", "roti", "phulka", "atta roti", "flatbread", "chapatti"),
+    "X006": ("aloo paratha", "potato paratha", "paratha"),
+    "X007": ("dalia porridge", "broken wheat porridge", "dalia"),
+    "X008": ("masala omelette", "omelette", "egg omelette"),
+    "X022": ("curd", "dahi", "plain yogurt", "indian yogurt"),
+    "X023": ("fruit and nut bowl", "fruit bowl"),
+    "X031": ("toor dal", "dal toor", "arhar dal", "tuvar dal", "yellow dal", "sambar dal"),
+    "X032": ("moong dal", "dal moong", "green gram dal", "split moong"),
+    "X033": ("rajma curry", "rajma", "kidney bean curry", "rajma chawal"),
+    "X034": ("chole", "chickpea curry", "chana masala", "kabuli chana"),
+    "X036": ("sambhar", "sambar", "vegetable sambar"),
+    "X037": ("palak paneer", "saag paneer", "spinach cottage cheese"),
+    "X038": ("bhindi sabzi", "okra fry", "bhindi masala"),
+    "X039": ("curd rice", "thayir sadam", "dahi bhat"),
+    "X042": ("chicken curry", "murgh curry"),
+    "X043": ("fish curry", "machhi curry", "rohu curry"),
+    "X044": ("egg curry", "anda curry"),
+    "X045": ("palak dal", "spinach dal", "dal palak"),
+    "X047": ("bajra roti", "pearl millet roti", "millet flatbread"),
+    "L003": ("paneer", "cottage cheese", "chenna", "indian cheese"),
+    "B001": ("chana dal", "bengal gram dal", "split bengal gram"),
+    "B003": ("urad dal", "black gram dal", "split black gram"),
+    "B010": ("moong dal", "green gram dal", "mung dal"),
+    "B013": ("masoor dal", "red lentil", "lentil dal"),
+    "B018": ("black rajma", "rajmah black"),
+    "B020": ("red rajma", "rajma", "rajmah red", "kidney beans"),
+    "B021": ("toor dal", "tuvar dal", "arhar dal", "red gram dal"),
+    "A011": ("poha", "flattened rice", "aval"),
+    "A014": ("raw rice", "parboiled rice", "white rice"),
+    "A015": ("raw rice milled", "white rice"),
+    "A019": ("wheat atta", "whole wheat flour", "atta"),
+    "A022": ("suji", "rava", "semolina"),
+    "F006": ("aloo", "potato"),
+    "D061": ("tomato", "tamatar"),
+    "D075": ("onion", "pyaz"),
+    "G017": ("onion", "green chilli"),
+    "C040": ("palak", "spinach", "palak leaves"),
+}
 
 #: Stage 4 accepts a fuzzy name match at or above this score and flags anything
 #: below it as ``unmatched``. Set by the design brief.
@@ -184,7 +231,7 @@ class FoodDatabaseMissingError(RuntimeError):
 
 @dataclass(frozen=True, slots=True)
 class FoodRecord:
-    """One curated USDA food, with everything the pipeline needs about it."""
+    """One curated food (USDA, IFCT 2017, or Composite Dish), with full provenance."""
 
     fdc_id: str
     name: str
@@ -194,6 +241,16 @@ class FoodRecord:
     allowed_forms: tuple[Form, ...]
     tags: frozenset[str] = field(default_factory=frozenset)
     nutrients_per_100g: NutrientVector = field(default_factory=NutrientVector)
+    source: str = "USDA"  # "USDA", "IFCT_2017", "COMPOSITE"
+    source_id: str = ""
+    data_type: str = ""
+    aliases: tuple[str, ...] = ()
+    missing_nutrients: frozenset[str] = field(default_factory=frozenset)
+    state: str = "raw"  # "raw", "cooked", "prepared"
+    ingredients: dict[str, float] | None = None
+    yield_g: float | None = None
+    diet: str = ""
+    serving_g: float | None = None
 
     def has_tag(self, tag: str) -> bool:
         return tag in self.tags
@@ -212,7 +269,20 @@ class FoodRecord:
             name=self.name,
             quantity_g=quantity_g,
             form=form if form is not None else self.default_form,
+            source=self.source,
         )
+
+    @property
+    def is_indian(self) -> bool:
+        return self.source in ("IFCT_2017", "COMPOSITE")
+
+    @property
+    def is_composite(self) -> bool:
+        return self.source == "COMPOSITE"
+
+    @property
+    def is_usda(self) -> bool:
+        return self.source == "USDA"
 
 
 class FoodDB:
@@ -223,8 +293,12 @@ class FoodDB:
         self._by_id: dict[str, FoodRecord] = {r.fdc_id: r for r in records}
         self._names: list[str] = [r.name for r in records]
 
-        # --- name-matching index (built once, ~2.6k rows) ------------------
-        self._tokens: list[list[str]] = [_tokenize(name) for name in self._names]
+        # --- name-matching index (built once, with aliases included) -------
+        self._search_texts: list[str] = [
+            f"{r.name} {' '.join(r.aliases)}" if r.aliases else r.name
+            for r in records
+        ]
+        self._tokens: list[list[str]] = [_tokenize(text) for text in self._search_texts]
         self._weights: list[list[float]] = [_position_weights(t) for t in self._tokens]
         self._weight_totals: list[float] = [sum(w) or 1.0 for w in self._weights]
         self._token_sets: list[frozenset[str]] = [frozenset(t) for t in self._tokens]
@@ -265,6 +339,17 @@ class FoodDB:
             raise FoodDatabaseMissingError(FOOD_DB_PARQUET)
         return cls(cls._to_records(frame))
 
+    @classmethod
+    def load_unified(
+        cls,
+        usda_path: Path | None = None,
+        indian_path: Path | None = None,
+    ) -> FoodDB:
+        """Load unified database combining USDA and IFCT 2017 foods with provenance."""
+        usda_db = cls.load(usda_path or FOOD_DB_PARQUET)
+        indian_db = cls.load(indian_path or INDIA_FOOD_DB_PARQUET)
+        return cls(usda_db.records + indian_db.records)
+
     @staticmethod
     def _read(path: Path) -> pd.DataFrame:
         if not path.exists():
@@ -276,22 +361,99 @@ class FoodDB:
 
     @staticmethod
     def _to_records(frame: pd.DataFrame) -> list[FoodRecord]:
+        from foodsense.data.indian_dishes import DISHES
+
+        dishes_by_code = {d.code: d for d in DISHES}
         records: list[FoodRecord] = []
         nutrient_columns = [n for n in NUTRIENTS if n in frame.columns]
+
         for row in frame.to_dict(orient="records"):
             allowed = tuple(Form(f) for f in json.loads(row["allowed_forms"]))
+            fdc_id = str(row["fdc_id"])
+            name = str(row["name"])
+            data_type = str(row.get("data_type") or "")
+            tags_raw = row.get("tags")
+            tags = (
+                frozenset(json.loads(tags_raw))
+                if tags_raw and isinstance(tags_raw, str)
+                else (frozenset(tags_raw) if isinstance(tags_raw, (set, list, frozenset)) else frozenset())
+            )
+
+            # Distinguish provenance: IFCT 2017 vs Composite Dish vs USDA
+            if data_type == "ifct2017" or fdc_id.startswith("X") or (
+                len(fdc_id) >= 4 and fdc_id[0].isalpha() and fdc_id[1:].isdigit()
+            ):
+                if fdc_id.startswith("X"):
+                    source = "COMPOSITE"
+                    dtype = "composite_dish"
+                    state = "prepared"
+                    dish = dishes_by_code.get(fdc_id)
+                    ingredients = dish.ingredients if dish else None
+                    yield_g = dish.yield_g if dish else None
+                    diet = dish.diet if dish else "vegetarian"
+                    serving_g = dish.serving_g if dish else None
+                else:
+                    source = "IFCT_2017"
+                    dtype = "ifct2017"
+                    state = "raw"
+                    ingredients = None
+                    yield_g = None
+                    diet = "non_vegetarian"
+                    if "diet_vegetarian" in tags or "vegetarian" in tags:
+                        diet = "vegetarian"
+                    elif "diet_eggetarian" in tags or "eggetarian" in tags:
+                        diet = "eggetarian"
+                    serving_g = None
+
+                aliases = INDIAN_ALIASES.get(fdc_id, ())
+                # IFCT 2017 explicitly does not report B12; record it as missing rather than true zero
+                missing_nutrients = frozenset({"vitamin_b12_ug"})
+            else:
+                source = "USDA"
+                dtype = data_type or "sr_legacy_food"
+                cat = str(row.get("category") or "")
+                state = (
+                    "prepared"
+                    if cat == "prepared"
+                    else (
+                        "cooked"
+                        if "cooked" in name.lower() or "boiled" in name.lower()
+                        else "raw"
+                    )
+                )
+                ingredients = None
+                yield_g = None
+                diet = (
+                    "vegetarian"
+                    if cat in ("fruit", "vegetable", "grain", "legume")
+                    else ("dairy" if cat == "dairy" else "non_vegetarian")
+                )
+                serving_g = None
+                aliases = ()
+                missing_nutrients = frozenset()
+
             records.append(
                 FoodRecord(
-                    fdc_id=str(row["fdc_id"]),
-                    name=row["name"],
-                    category=row["category"],
-                    hazard_class=row.get("hazard_class") or "",
+                    fdc_id=fdc_id,
+                    name=name,
+                    category=str(row["category"]),
+                    hazard_class=str(row.get("hazard_class") or ""),
                     default_form=Form(row["default_form"]),
                     allowed_forms=allowed,
-                    tags=frozenset(json.loads(row["tags"])),
+                    tags=tags,
                     nutrients_per_100g=NutrientVector(
                         **{n: float(row[n]) for n in nutrient_columns}
                     ),
+                    source=source,
+                    source_id=fdc_id,
+                    data_type=dtype,
+                    aliases=aliases,
+                    missing_nutrients=missing_nutrients,
+                    state=state,
+                    ingredients=ingredients,
+                    yield_g=yield_g,
+                    diet=diet,
+                    serving_g=serving_g,
                 )
             )
         return records
@@ -336,6 +498,18 @@ class FoodDB:
 
     def by_tag(self, tag: str) -> list[FoodRecord]:
         return [r for r in self._records if tag in r.tags]
+
+    def by_source(self, source: str) -> list[FoodRecord]:
+        """Foods originating from a specific data source (e.g. USDA, IFCT_2017, COMPOSITE)."""
+        src = source.upper()
+        return [r for r in self._records if r.source.upper() == src]
+
+    def sources(self) -> dict[str, int]:
+        """Counts of foods by data source."""
+        counts: dict[str, int] = {}
+        for r in self._records:
+            counts[r.source] = counts.get(r.source, 0) + 1
+        return dict(sorted(counts.items(), key=lambda kv: -kv[1]))
 
     def categories(self) -> dict[str, int]:
         counts: dict[str, int] = {}
@@ -509,3 +683,10 @@ def get_indian_food_db() -> FoodDB:
     verified against.
     """
     return FoodDB.load(INDIA_FOOD_DB_PARQUET)
+
+
+@lru_cache(maxsize=1)
+def get_unified_food_db() -> FoodDB:
+    """Process-wide cached unified food database combining USDA and IFCT 2017."""
+    return FoodDB.load_unified()
+

@@ -41,12 +41,26 @@ export default function Verification({ report }) {
   const fixes = report.safety_fixes ?? []
   const unmatched = report.unmatched ?? []
   const flagged = report.flagged ?? []
+  const sourceNotes = report.source_notes ?? []
+  const sourceBreakdown = report.source_breakdown ?? {}
   const clean = corrections.length === 0 && fixes.length === 0 && unmatched.length === 0
 
   return (
     <div>
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <h3 className="font-semibold text-slate-800">Stage 4 &mdash; USDA verification</h3>
+        <div className="flex items-center gap-2">
+          <h3 className="font-semibold text-slate-800">Stage 4 &mdash; Independent Verification</h3>
+          <div className="flex items-center gap-1">
+            {Object.entries(sourceBreakdown).map(([src, count]) => (
+              <span
+                key={src}
+                className="text-[10px] font-bold px-2 py-0.5 rounded bg-forest-100 text-forest-800 border border-forest-200"
+              >
+                {src}: {count}
+              </span>
+            ))}
+          </div>
+        </div>
         {report.final_pass ? (
           <Badge tone="pass">&#10003; verified safe</Badge>
         ) : (
@@ -61,11 +75,27 @@ export default function Verification({ report }) {
         <Count n={unmatched.length} label="unmatched" tone="bad" />
       </div>
 
+      {sourceNotes.length > 0 && (
+        <section className="mb-4 bg-forest-50/60 border border-forest-200/80 rounded-lg p-3">
+          <h4 className="text-xs uppercase font-bold text-forest-800 tracking-wide mb-1.5 flex items-center gap-1.5">
+            <span>🔬</span> Catalog Verification &amp; Ingredient Provenance Notes
+          </h4>
+          <ul className="text-xs text-forest-900 space-y-1">
+            {sourceNotes.map((note, i) => (
+              <li key={i} className="flex items-start gap-1.5">
+                <span className="text-forest-600 font-bold">&bull;</span>
+                <span>{note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
       {clean && (
         <p className="text-sm text-slate-600 mb-3">
           Nothing needed correcting. On the offline path Stage 3 emits the optimiser&rsquo;s own
           items, so the figures above being zero is the expected result &mdash; it means the
-          reported meal already <em>is</em> the database recomputation, not that the check was
+          reported meal already <em>is</em> the independent catalog recomputation, not that the check was
           skipped.
         </p>
       )}
@@ -106,7 +136,7 @@ export default function Verification({ report }) {
       {corrections.length > 0 && (
         <section className="mb-4">
           <h4 className="text-sm font-semibold text-slate-800 mb-1.5">
-            Claims corrected to the USDA value
+            Claims corrected to catalog ground truth
           </h4>
           <table className="w-full text-sm">
             <thead>

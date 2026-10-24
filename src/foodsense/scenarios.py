@@ -15,10 +15,20 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from foodsense.data.fdc import FoodDB, get_food_db
+from foodsense.data.fdc import FoodDB, get_food_db, get_unified_food_db
+from foodsense.nutrition import LifeStage, Sex
 from foodsense.schemas import AgeGroup, Form, Goal, HealthFlag, Meal, MealItem, UserProfile
 
-__all__ = ["SCENARIOS", "Scenario", "ScenarioItem", "load_scenario", "scenario_names"]
+__all__ = [
+    "ALL_SCENARIOS",
+    "INDIAN_SCENARIOS",
+    "ORIGINAL_SCENARIOS",
+    "SCENARIOS",
+    "Scenario",
+    "ScenarioItem",
+    "load_scenario",
+    "scenario_names",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -52,7 +62,7 @@ class Scenario:
 
 
 def _build(items: tuple[ScenarioItem, ...], db: FoodDB | None) -> Meal:
-    db = db or get_food_db()
+    db = db or get_unified_food_db()
     built: list[MealItem] = []
     for item in items:
         record = db.find(item.fdc_id)
@@ -197,7 +207,148 @@ ADULT_WEIGHT = Scenario(
 )
 
 
-SCENARIOS: dict[str, Scenario] = {s.key: s for s in (TODDLER_CHOKING, ELDERLY_SODIUM, ADULT_WEIGHT)}
+# ---------------------------------------------------------------------------
+# Scenario 4 -- Indian adolescent iron case (ICMR-NIN 2020 RDA)
+# ---------------------------------------------------------------------------
+
+INDIAN_ADOLESCENT_IRON = Scenario(
+    key="indian_adolescent_iron",
+    title="Adolescent girl, 14: rice and dal lunch (iron & micronutrient focus)",
+    description=(
+        "A 14-year-old vegetarian adolescent girl eating a traditional Indian lunch of chapati "
+        "and toor dal, with iron-dense staples (bajra roti, palak paneer, chole) in the pantry."
+    ),
+    profile=UserProfile(
+        age_group=AgeGroup.ADULT,
+        age_months=14 * 12,
+        weight_kg=48.0,
+        goal=Goal.BALANCED_NUTRITION,
+        health_flags=[HealthFlag.IRON_FOCUS],
+        life_stage=LifeStage.TEEN_13_15,
+        sex=Sex.FEMALE,
+        diet="vegetarian",
+    ),
+    planned=(
+        ScenarioItem("X005", "Chapati (roti)", 60.0),
+        ScenarioItem("X031", "Dal (red gram / toor)", 100.0),
+    ),
+    pantry=(
+        ScenarioItem("X047", "Bajra roti (pearl-millet roti)", 0.0),
+        ScenarioItem("X037", "Palak paneer", 0.0),
+        ScenarioItem("X034", "Chole (chickpea curry)", 0.0),
+        ScenarioItem("X022", "Curd", 0.0),
+        ScenarioItem("L003", "Paneer", 0.0),
+    ),
+    expectation=(
+        "An iron shortfall against ICMR-NIN 2020 RDA lunch targets prompts optimization toward "
+        "iron-dense Indian staples from the pantry (such as bajra roti or palak paneer), "
+        "verified independently against IFCT 2017 composite dish formulations."
+    ),
+    notes=(
+        "Exercises ICMR-NIN 2020 life-stage meal-fraction targets (TEEN_13_15 Female) "
+        "and vegetarian constraints on Indian composite dishes.",
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 5 -- Indian adult glycemic management case
+# ---------------------------------------------------------------------------
+
+INDIAN_ADULT_GLYCEMIC = Scenario(
+    key="indian_adult_glycemic",
+    title="Adult male, 45, Type 2 diabetes: high-GI rice and potato meal",
+    description=(
+        "A 45-year-old adult managing glycemic load with a planned lunch heavy in refined rice "
+        "and potatoes, with low-GI Indian alternatives in the pantry."
+    ),
+    profile=UserProfile(
+        age_group=AgeGroup.ADULT,
+        age_months=45 * 12,
+        weight_kg=74.0,
+        goal=Goal.GLYCEMIC_CONTROL,
+        health_flags=[HealthFlag.DIABETES],
+        sex=Sex.MALE,
+        diet="vegetarian",
+    ),
+    planned=(
+        ScenarioItem("168878", "Rice, white, long-grain, regular, enriched, cooked", 180.0),
+        ScenarioItem("F006", "Potato, brown skin", 150.0),
+    ),
+    pantry=(
+        ScenarioItem("X032", "Dal (green gram / moong)", 0.0),
+        ScenarioItem("X005", "Chapati (roti)", 0.0),
+        ScenarioItem("L003", "Paneer", 0.0),
+        ScenarioItem("X022", "Curd", 0.0),
+        ScenarioItem("X037", "Palak paneer", 0.0),
+    ),
+    expectation=(
+        "High glycemic load from refined rice and starchy potato triggers substitutions toward "
+        "moong dal, whole wheat chapati, and paneer from the pantry to improve glycemic control."
+    ),
+    notes=(
+        "Combines USDA staples with IFCT 2017 and composite dishes under glycemic control rules.",
+    ),
+)
+
+
+# ---------------------------------------------------------------------------
+# Scenario 6 -- Indian toddler choking prevention case
+# ---------------------------------------------------------------------------
+
+INDIAN_TODDLER_SAFETY = Scenario(
+    key="indian_toddler_safety",
+    title="Toddler, 18 months: poha with whole peanuts",
+    description=(
+        "An 18-month-old toddler served poha containing whole peanuts (an AAP choking hazard), "
+        "with safe Indian alternatives in the pantry."
+    ),
+    profile=UserProfile(
+        age_group=AgeGroup.TODDLER,
+        age_months=18,
+        weight_kg=11.0,
+        goal=Goal.BALANCED_NUTRITION,
+    ),
+    planned=(
+        ScenarioItem("X004", "Poha (flattened rice)", 70.0),
+        ScenarioItem("173806", "Peanuts, all types, dry-roasted, without salt", 25.0, Form.WHOLE),
+    ),
+    pantry=(
+        ScenarioItem("X022", "Curd", 0.0),
+        ScenarioItem("X001", "Idli", 0.0),
+        ScenarioItem("X007", "Dalia porridge", 0.0),
+        ScenarioItem("X032", "Dal (green gram / moong)", 0.0),
+    ),
+    expectation=(
+        "Whole peanuts are identified as a dangerous choking hazard for an 18-month toddler "
+        "and removed or substituted with safe Indian foods like curd or dalia porridge."
+    ),
+    notes=(
+        "Demonstrates paediatric safety enforcement across Indian composite dishes and USDA foods.",
+    ),
+)
+
+
+ORIGINAL_SCENARIOS: dict[str, Scenario] = {
+    s.key: s for s in (TODDLER_CHOKING, ELDERLY_SODIUM, ADULT_WEIGHT)
+}
+
+INDIAN_SCENARIOS: dict[str, Scenario] = {
+    s.key: s
+    for s in (
+        INDIAN_ADOLESCENT_IRON,
+        INDIAN_ADULT_GLYCEMIC,
+        INDIAN_TODDLER_SAFETY,
+    )
+}
+
+ALL_SCENARIOS: dict[str, Scenario] = {
+    **ORIGINAL_SCENARIOS,
+    **INDIAN_SCENARIOS,
+}
+
+#: Default demo scenarios
+SCENARIOS: dict[str, Scenario] = ORIGINAL_SCENARIOS
 
 
 def scenario_names() -> list[str]:
@@ -206,6 +357,6 @@ def scenario_names() -> list[str]:
 
 def load_scenario(key: str) -> Scenario:
     try:
-        return SCENARIOS[key]
+        return ALL_SCENARIOS[key]
     except KeyError:
-        raise KeyError(f"Unknown scenario {key!r}. Available: {', '.join(SCENARIOS)}") from None
+        raise KeyError(f"Unknown scenario {key!r}. Available: {', '.join(ALL_SCENARIOS)}") from None

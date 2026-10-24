@@ -278,10 +278,11 @@ class MealItem(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    food_id: str = Field(..., description="USDA FoodData Central id (fdc_id) as a string")
-    name: str = Field(..., description="Human-readable food name, ideally the USDA description")
+    food_id: str = Field(..., description="Food identifier (USDA fdc_id or IFCT/composite code) as a string")
+    name: str = Field(..., description="Human-readable food name")
     quantity_g: float = Field(..., ge=0.0, description="Amount in grams")
     form: Form = Field(default=Form.WHOLE, description="Preparation form")
+    source: str | None = Field(default=None, description="Data source provenance (USDA / IFCT_2017 / COMPOSITE)")
 
     @field_validator("food_id", mode="before")
     @classmethod
@@ -334,6 +335,13 @@ class UserProfile(BaseModel):
     goal: Goal = Goal.BALANCED_NUTRITION
     health_flags: list[HealthFlag] = Field(default_factory=list)
     notes: str | None = None
+    life_stage: LifeStage | None = Field(
+        default=None, description="ICMR-NIN 2020 paediatric / adolescent life stage"
+    )
+    sex: Sex | None = Field(default=None, description="Biological sex for ICMR-NIN nutrient targets")
+    diet: str | None = Field(
+        default=None, description="Dietary pattern (e.g. vegetarian, eggetarian, non_vegetarian)"
+    )
 
     def has(self, flag: HealthFlag) -> bool:
         return flag in self.health_flags
@@ -424,6 +432,7 @@ class ItemChange(BaseModel):
     old_form: Form | None = None
     new_form: Form | None = None
     reason: str | None = Field(default=None, description="One-line human explanation")
+    source: str | None = Field(default=None, description="Data source supporting the food item")
 
 
 class MealDiff(BaseModel):
@@ -460,6 +469,15 @@ class Stage1Result(BaseModel):
     )
     model_name: str = "lightgbm"
     runtime_s: float = 0.0
+    is_ood: bool = Field(
+        default=False, description="True when the meal includes foods out-of-distribution for the ML model"
+    )
+    prediction_source: str = Field(
+        default="model", description="surrogate_model, source_aware_adapter, or rule_engine_fallback"
+    )
+    confidence_note: str | None = Field(
+        default=None, description="Scientifically defensible note on model validity and uncertainty"
+    )
 
 
 class Stage2Result(BaseModel):
@@ -479,6 +497,7 @@ class Stage2Result(BaseModel):
     runtime_s: float = 0.0
     method: str = "foodsense_de"
     search_space_size: int = Field(default=0, description="|planned union pantry|")
+    history: list[float] = Field(default_factory=list, description="Per-generation objective trajectory")
 
 
 class Stage3Result(BaseModel):
@@ -556,6 +575,18 @@ class VerificationReport(BaseModel):
     verified_nutrients: NutrientVector = Field(default_factory=NutrientVector)
     final_pass: bool = False
     runtime_s: float = 0.0
+    sources: dict[str, str] = Field(
+        default_factory=dict, description="food_id -> provenance (USDA / IFCT_2017 / COMPOSITE)"
+    )
+    source_breakdown: dict[str, int] = Field(
+        default_factory=dict, description="Number of items verified by source"
+    )
+    source_notes: list[str] = Field(
+        default_factory=list, description="Source-aware verification details and recomputation methodology"
+    )
+    unverifiable: list[str] = Field(
+        default_factory=list, description="Items that could not be independently checked"
+    )
 
     @computed_field  # type: ignore[prop-decorator]
     @property

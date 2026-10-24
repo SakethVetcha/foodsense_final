@@ -38,7 +38,7 @@
   "n_test": 4800,
   "models": {
     "lightgbm": {
-      "train_seconds": 6.59,
+      "train_seconds": 3.28,
       "foodcom_holdout": {
         "rmse": 0.05756805055823384,
         "mae": 0.04589306393501993,
@@ -92,7 +92,7 @@
       }
     },
     "xgboost": {
-      "train_seconds": 2.86,
+      "train_seconds": 5.13,
       "foodcom_holdout": {
         "rmse": 0.058276016060838536,
         "mae": 0.04636022201268487,
@@ -217,5 +217,5 @@
       "gain": 1054
     }
   ],
-  "total_seconds": 108.0
+  "total_seconds": 218.6
 }

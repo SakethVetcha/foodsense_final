@@ -29,7 +29,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from foodsense.data.fdc import FoodDB, FoodRecord, get_food_db
+from foodsense.data.fdc import FoodDB, FoodRecord, get_food_db, get_unified_food_db
 from foodsense.schemas import Form, Meal, MealItem, UserProfile
 
 __all__ = ["SearchSpace", "Variable", "build_space", "served_quantity"]
@@ -269,7 +269,7 @@ def build_space(
     starting point: having spare rice in the cupboard does not mean the rice on
     the plate is a new addition.
     """
-    db = db or get_food_db()
+    db = db or get_unified_food_db()
     pantry_items = pantry.items if isinstance(pantry, Meal) else list(pantry or [])
 
     variables: list[Variable] = []

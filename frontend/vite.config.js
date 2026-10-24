@@ -6,6 +6,7 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   base: './',
+  resolve: { preserveSymlinks: true },
   build: { outDir: 'dist', emptyOutDir: true, assetsInlineLimit: 0 },
   // Dev only. The shipped shape serves this bundle from the FastAPI app itself,
   // single origin, so there is no proxy and no CORS in the demo path at all.

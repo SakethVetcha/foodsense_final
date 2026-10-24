@@ -13,6 +13,7 @@ loop over single rows.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
@@ -47,6 +48,21 @@ class _Predictor(Protocol):
     def predict(self, X: np.ndarray) -> np.ndarray: ...
 
 
+_PREDICT_LOCK = threading.Lock()
+_FALLBACK_XGB: Any = None
+
+
+def _get_fallback_xgb() -> Any:
+    global _FALLBACK_XGB
+    if _FALLBACK_XGB is None and XGBOOST_PATH.exists():
+        from xgboost import XGBRegressor
+
+        xgb = XGBRegressor()
+        xgb.load_model(bytearray(XGBOOST_PATH.read_bytes()))
+        _FALLBACK_XGB = xgb
+    return _FALLBACK_XGB
+
+
 @dataclass(slots=True)
 class SuitabilityModel:
     """A trained surrogate plus the feature contract it was fitted against."""
@@ -76,7 +92,7 @@ class SuitabilityModel:
             from xgboost import XGBRegressor
 
             booster = XGBRegressor()
-            booster.load_model(str(XGBOOST_PATH))
+            booster.load_model(bytearray(XGBOOST_PATH.read_bytes()))
         else:
             raise ValueError(f"Unknown backend {backend!r}; expected 'lightgbm' or 'xgboost'")
 
@@ -103,8 +119,20 @@ class SuitabilityModel:
     # -- prediction ---------------------------------------------------------
 
     def _raw(self, X: np.ndarray) -> np.ndarray:
-        prediction = self.booster.predict(X)
-        return np.clip(np.asarray(prediction, dtype=np.float64), 0.0, 1.0)
+        X_arr = np.ascontiguousarray(X, dtype=np.float64)
+        with _PREDICT_LOCK:
+            if self.backend == "lightgbm":
+                try:
+                    prediction = self.booster.predict(X_arr, num_threads=1)
+                    return np.clip(np.asarray(prediction, dtype=np.float64), 0.0, 1.0)
+                except (OSError, RuntimeError, Exception):
+                    fallback = _get_fallback_xgb()
+                    if fallback is not None:
+                        prediction = fallback.predict(X_arr)
+                        return np.clip(np.asarray(prediction, dtype=np.float64), 0.0, 1.0)
+                    raise
+            prediction = self.booster.predict(X_arr)
+            return np.clip(np.asarray(prediction, dtype=np.float64), 0.0, 1.0)
 
     def predict(self, meal: Meal | list[MealItem], profile: UserProfile) -> float:
         """Predicted guideline suitability of one meal for one profile, in [0, 1]."""

@@ -55,7 +55,7 @@ from foodsense.constraints.goals import (
     meal_metrics,
     satisfaction,
 )
-from foodsense.data.fdc import FoodDB, get_food_db
+from foodsense.data.fdc import FoodDB, get_food_db, get_unified_food_db
 from foodsense.schemas import Meal, MealItem, RuleEvaluation, UserProfile, Violation
 
 __all__ = ["RuleEngine", "RuleEngineConfig", "get_rule_engine"]
@@ -88,7 +88,7 @@ class RuleEngine:
     """Evaluates a meal against every rule that applies to a profile."""
 
     def __init__(self, db: FoodDB | None = None, config: RuleEngineConfig | None = None) -> None:
-        self.db = db or get_food_db()
+        self.db = db or get_unified_food_db()
         self.config = config or RuleEngineConfig.load()
         self._rules_cache: dict[tuple, list[Rule]] = {}
 
@@ -102,6 +102,9 @@ class RuleEngine:
             profile.goal,
             profile.age_months,
             profile.weight_kg,
+            profile.life_stage,
+            profile.sex,
+            profile.diet,
             tuple(sorted(f.value for f in profile.health_flags)),
         )
 
@@ -136,6 +139,24 @@ class RuleEngine:
                 continue
             for rule in flag_rule.rules():
                 by_quantity[rule.quantity] = rule
+
+        # If ICMR-NIN life_stage is specified, apply single-meal scaled ICMR-NIN targets
+        if profile.life_stage is not None:
+            from foodsense.nutrition import Sex, slot_targets
+
+            sex = profile.sex or Sex.MALE
+            nin_targets = slot_targets(profile.life_stage, sex, slot="lunch")
+            for quantity, threshold in nin_targets.items():
+                rule_id = f"icmr_nin.{profile.life_stage.value}.{quantity}"
+                by_quantity[quantity] = Rule(
+                    rule_id=rule_id,
+                    quantity=quantity,
+                    threshold=threshold,
+                    severity="soft",
+                    message=f"Must meet ICMR-NIN 2020 single-meal {quantity} target for {profile.life_stage.value}",
+                    source="ICMR-NIN 2020 RDA (Single-meal lunch slot)",
+                )
+
         return list(by_quantity.values())
 
     def _effective_flags(self, profile: UserProfile):
@@ -213,12 +234,37 @@ class RuleEngine:
         self, items: list[MealItem], profile: UserProfile
     ) -> list[StructuralViolation]:
         """Hard-safety checks about *what* is in the meal rather than how much."""
-        return [
+        checks = [
             *check_choking(items, profile, self.db),
             *check_excluded_tags(items, profile, self.db),
             *check_texture(items, profile, self.db),
             *check_age_gated_foods(items, profile, self.db),
         ]
+        if profile.diet:
+            req_diet = profile.diet.lower()
+            for item in items:
+                rec = self.db.find(item.food_id)
+                if rec is None:
+                    continue
+                if req_diet == "vegetarian" and rec.diet in ("non_vegetarian", "eggetarian"):
+                    checks.append(
+                        StructuralViolation(
+                            rule_id="dietary.vegetarian_exclusion",
+                            item=item,
+                            message=f"{rec.name} violates vegetarian preference ({rec.diet})",
+                            removable_only=True,
+                        )
+                    )
+                elif req_diet == "eggetarian" and rec.diet == "non_vegetarian":
+                    checks.append(
+                        StructuralViolation(
+                            rule_id="dietary.eggetarian_exclusion",
+                            item=item,
+                            message=f"{rec.name} violates eggetarian preference ({rec.diet})",
+                            removable_only=True,
+                        )
+                    )
+        return checks
 
     # -- convenience --------------------------------------------------------
 

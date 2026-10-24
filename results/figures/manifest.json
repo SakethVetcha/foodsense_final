@@ -1,0 +1,68 @@
+[
+  {
+    "figure_id": "fig1_cf_method_comparison",
+    "number": 1,
+    "title": "Counterfactual Optimization Performance Across Baselines",
+    "caption": "Figure 1. Empirical evaluation of FoodSense availability-aware differential evolution against DiCE-Genetic, Random Mutation, Greedy Local Search, and Unconstrained ML Gradient baselines across 300 evaluation meals. FoodSense uniquely enforces zero availability violations (0%) while eliminating choking and medication safety hazards (0% safety violations).",
+    "sample_size": "N = 300 evaluation cases across toddler, adult, and older adult cohorts",
+    "data_source": "results/cf_comparison.csv",
+    "png_path": "results\\figures\\fig1_cf_method_comparison.png",
+    "svg_path": "results\\figures\\fig1_cf_method_comparison.svg",
+    "csv_path": "results\\figures\\fig1_cf_method_comparison.csv"
+  },
+  {
+    "figure_id": "fig2_objective_convergence",
+    "number": 2,
+    "title": "Optimization Objective Convergence Trajectory",
+    "caption": "Figure 2. Convergence of the composite objective loss function L_total = L_valid + lambda * L_edit + L_safe across generations for the counterfactual optimizer. Demonstrates rapid early descent followed by plateau stabilization and early-stopping termination.",
+    "sample_size": "Differential evolution trajectory over population size = 40",
+    "data_source": "Stage 2 differential evolution history",
+    "png_path": "results\\figures\\fig2_objective_convergence.png",
+    "svg_path": "results\\figures\\fig2_objective_convergence.svg",
+    "csv_path": "results\\figures\\fig2_objective_convergence.csv"
+  },
+  {
+    "figure_id": "fig3_lambda_sensitivity_tradeoff",
+    "number": 3,
+    "title": "Sensitivity Trade-off: Validity Gain vs Edit Distance",
+    "caption": "Figure 3. Sensitivity analysis of the validity scaling parameter lambda_validity across evaluation sets. While guideline attainment increases monotonically with lambda_validity, preparation safety constraints remain invariant at 100% compliance across all tested parameterizations.",
+    "sample_size": "N = 90 cases evaluated across 6 parameter increments",
+    "data_source": "results/lambda_sweep.csv",
+    "png_path": "results\\figures\\fig3_lambda_sensitivity_tradeoff.png",
+    "svg_path": "results\\figures\\fig3_lambda_sensitivity_tradeoff.svg",
+    "csv_path": "results\\figures\\fig3_lambda_sensitivity_tradeoff.csv"
+  },
+  {
+    "figure_id": "fig4_surrogate_calibration_boundary",
+    "number": 4,
+    "title": "Surrogate Model Calibration and Decision Boundary Discrimination",
+    "caption": "Figure 4. Predicted suitability from the Stage-1 LightGBM surrogate against the deterministic Rule Engine soft score. The 0.70 cut-off demarcates the acceptable meal decision boundary, showing high ranking fidelity (R^2 = 0.89, ROC AUC = 0.94) and low off-diagonal boundary discrepancy.",
+    "sample_size": "Evaluated on held-out meals from Food.com and Nutrition5k",
+    "data_source": "results/surrogate_boundary.json",
+    "png_path": "results\\figures\\fig4_surrogate_calibration_boundary.png",
+    "svg_path": "results\\figures\\fig4_surrogate_calibration_boundary.svg",
+    "csv_path": "results\\figures\\fig4_surrogate_calibration_boundary.csv"
+  },
+  {
+    "figure_id": "fig5_verification_audit",
+    "number": 5,
+    "title": "Stage-4 Independent Multi-Source Verification Audit",
+    "caption": "Figure 5. Audit of Stage-4 verification performance across integrated food catalog sources. Validates independent nutrient recalculation, yield scaling, and transparent disclosure of unmeasured micronutrients (e.g. Vitamin B12 in IFCT 2017 raw tables) without phantom zero substitution.",
+    "sample_size": "Catalog audit across 3,162 unified catalog records",
+    "data_source": "results/verification_eval.json",
+    "png_path": "results\\figures\\fig5_verification_audit.png",
+    "svg_path": "results\\figures\\fig5_verification_audit.svg",
+    "csv_path": "results\\figures\\fig5_verification_audit.csv"
+  },
+  {
+    "figure_id": "fig6_scenario_nutrients",
+    "number": 6,
+    "title": "Scenario Nutrient Transformation (Adolescent Indian Nutrition (Iron Focus))",
+    "caption": "Figure 6. Absolute nutrient comparison between the user's initial planned meal (Stage 1) and the availability-constrained counterfactual meal (Stage 4) for Adolescent Indian Nutrition (Iron Focus). Demonstrates targeted micronutrient and macronutrient repair using available pantry ingredients.",
+    "sample_size": "Scenario-specific optimization execution",
+    "data_source": "Pipeline trace stage1 and stage4 nutrient totals",
+    "png_path": "results\\figures\\fig6_scenario_nutrients.png",
+    "svg_path": "results\\figures\\fig6_scenario_nutrients.svg",
+    "csv_path": "results\\figures\\fig6_scenario_nutrients.csv"
+  }
+]

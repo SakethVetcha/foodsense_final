@@ -1,0 +1,6 @@
+Method,Usable_Validity_Pct,Availability_Violation_Pct,Safety_Violation_Pct
+FoodSense (DE),29.0,0.0,0.0
+Greedy Search,28.7,50.0,23.0
+DiCE (Random),20.0,29.0,25.7
+Wachter (Grad),8.3,53.7,32.3
+DiCE (Genetic),2.0,0.0,26.7

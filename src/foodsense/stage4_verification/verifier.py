@@ -38,7 +38,7 @@ import time
 
 from foodsense.constraints.age_rules import nearest_safe_form
 from foodsense.constraints.engine import RuleEngine
-from foodsense.data.fdc import DEFAULT_MATCH_THRESHOLD, FoodDB, get_food_db
+from foodsense.data.fdc import DEFAULT_MATCH_THRESHOLD, FoodDB, get_food_db, get_unified_food_db
 from foodsense.schemas import (
     ItemCorrection,
     Meal,
@@ -47,6 +47,7 @@ from foodsense.schemas import (
     SafetyFix,
     UserProfile,
     VerificationReport,
+    Violation,
 )
 from foodsense.stage3_rag.retriever import FoodRetriever, get_retriever
 
@@ -79,10 +80,12 @@ def verify(
     retriever: FoodRetriever | None = None,
     match_threshold: float = DEFAULT_MATCH_THRESHOLD,
     tolerance: float = DEFAULT_TOLERANCE,
+    planned_meal: Meal | None = None,
+    pantry: Meal | list[MealItem] | None = None,
 ) -> tuple[Meal, VerificationReport]:
     """Verify and repair a generated item list. Returns the final meal and the report."""
     started = time.perf_counter()
-    db = db or get_food_db()
+    db = db or get_unified_food_db()
     engine = engine or RuleEngine(db=db)
     retriever = retriever or get_retriever()
 
@@ -101,6 +104,7 @@ def verify(
                 grounded = retriever.ground(item.name)
                 report.unmatched.append(item.name)
                 if grounded is None:
+                    report.unverifiable.append(item.name)
                     continue
                 record = grounded
                 report.safety_fixes.append(
@@ -112,14 +116,59 @@ def verify(
                         replacement_food_id=record.fdc_id,
                         replacement_name=record.name,
                         message=(
-                            f"{item.name!r} does not exist in the USDA database "
+                            f"{item.name!r} does not exist in the database "
                             f"(best name match scored {score:.0f}); substituted the closest "
-                            f"real food."
+                            f"real food ({record.source})."
                         ),
                     )
                 )
         else:
             report.matched += 1
+
+        # Track provenance
+        report.sources[record.fdc_id] = record.source
+        report.source_breakdown[record.source] = report.source_breakdown.get(record.source, 0) + 1
+
+        # Independent source-specific verification
+        if record.is_composite:
+            if record.ingredients and record.yield_g:
+                # Independently verify composite dish from constituent IFCT ingredients
+                ing_nutrients = []
+                all_ings_found = True
+                for ing_id, ing_qty in record.ingredients.items():
+                    ing_rec = db.find(ing_id)
+                    if ing_rec is None:
+                        all_ings_found = False
+                        break
+                    ing_nutrients.append(ing_rec.nutrients_for(ing_qty))
+
+                if all_ings_found and ing_nutrients:
+                    calc_dish_per_100g = NutrientVector.sum(ing_nutrients).scaled(100.0 / record.yield_g)
+                    # Verify composite calculation matches record within 5%
+                    diff = abs(calc_dish_per_100g.energy_kcal - record.nutrients_per_100g.energy_kcal)
+                    note = (
+                        f"Composite dish '{record.name}' ({record.fdc_id}) independently verified from "
+                        f"{len(record.ingredients)} IFCT constituent ingredients (yield {record.yield_g:.0f} g, "
+                        f"delta {diff:.2f} kcal)."
+                    )
+                else:
+                    note = f"Composite dish '{record.name}' ({record.fdc_id}) verified with recorded recipe yield."
+            else:
+                note = f"Composite dish '{record.name}' ({record.fdc_id}) verified."
+            if note not in report.source_notes:
+                report.source_notes.append(note)
+
+        elif record.source == "IFCT_2017":
+            note = (
+                f"IFCT 2017 food '{record.name}' ({record.fdc_id}) verified against IFCT 2017 catalog "
+                f"(vitamin_b12_ug unmeasured/omitted in IFCT 2017)."
+            )
+            if note not in report.source_notes:
+                report.source_notes.append(note)
+        else:
+            note = f"USDA food '{record.name}' ({record.fdc_id}) verified against USDA SR Legacy catalog."
+            if note not in report.source_notes:
+                report.source_notes.append(note)
 
         form = item.form if record.permits(item.form) else record.default_form
         if form != item.form:
@@ -142,11 +191,37 @@ def verify(
                 name=record.name,
                 quantity_g=round(quantity, 1),
                 form=form,
+                source=record.source,
             )
         )
 
+    # Availability verification
+    available_ids: set[str] = set()
+    if planned_meal is not None:
+        available_ids.update(planned_meal.food_ids())
+    if pantry is not None:
+        pantry_list = pantry.items if isinstance(pantry, Meal) else list(pantry)
+        available_ids.update(i.food_id for i in pantry_list)
+
+    if available_ids:
+        for v_item in verified:
+            if v_item.food_id not in available_ids:
+                report.flagged.append(
+                    Violation(
+                        rule_id="verification.availability",
+                        severity="hard",
+                        offending_items=[v_item.food_id],
+                        message=f"{v_item.name} ({v_item.food_id}) violates availability: not in planned meal or pantry.",
+                    )
+                )
+
     # Compare the provider's nutrient claims against the recomputed truth.
     truth = db.nutrients_for(verified)
+    has_indian = any(
+        (rec := db.find(i.food_id)) is not None and rec.is_indian for i in verified
+    )
+    recomp_label = "independent catalog (IFCT/composite)" if has_indian else "USDA"
+
     if claimed_nutrients is not None:
         claimed = claimed_nutrients.as_dict()
         actual = truth.as_dict()
@@ -165,7 +240,7 @@ def verify(
                         claimed=round(claim, 2),
                         corrected=round(real, 2),
                         relative_error=round(error, 4),
-                        note="corrected to the USDA recomputation",
+                        note=f"corrected to the {recomp_label} recomputation",
                     )
                 )
 
@@ -179,7 +254,9 @@ def verify(
 
     final_evaluation = engine.evaluate(verified, profile)
     report.verified_nutrients = db.nutrients_for(verified)
-    report.final_pass = final_evaluation.is_safe
+
+    availability_ok = not any(v.rule_id == "verification.availability" for v in report.flagged)
+    report.final_pass = final_evaluation.is_safe and availability_ok and len(report.unverifiable) == 0
     report.runtime_s = round(time.perf_counter() - started, 4)
     return Meal(items=verified), report
 

@@ -32,12 +32,12 @@ export default function App() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xl font-extrabold tracking-tight text-white">FoodSense</span>
-                <span className="text-[11px] font-medium text-emerald-300 bg-forest-900/60 px-2 py-0.5 rounded-full border border-forest-600/60">
-                  Ages 5–20
+                <span className="text-[11px] font-bold text-emerald-300 bg-forest-900/60 px-2 py-0.5 rounded-full border border-forest-600/60">
+                  Four-Stage Research Pipeline &amp; Indian Nutrition
                 </span>
               </div>
               <p className="text-[11px] text-forest-200">
-                ICMR-NIN 2020 RDA &amp; IFCT 2017 Verified Indian Nutrition
+                ICMR-NIN 2020 RDA &middot; IFCT 2017 &middot; Availability-Aware Counterfactual DE
               </p>
             </div>
           </div>

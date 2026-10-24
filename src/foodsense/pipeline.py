@@ -24,7 +24,7 @@ from __future__ import annotations
 import time
 
 from foodsense.constraints.engine import RuleEngine
-from foodsense.data.fdc import FoodDB, get_food_db
+from foodsense.data.fdc import FoodDB, get_food_db, get_unified_food_db
 from foodsense.schemas import (
     Meal,
     MealItem,
@@ -60,7 +60,7 @@ def run_pipeline(
 ) -> PipelineTrace:
     """Run all four stages and return the full trace."""
     started = time.perf_counter()
-    db = db or get_food_db()
+    db = db or get_unified_food_db()
     engine = engine or RuleEngine(db=db)
     objective_config = objective_config or ObjectiveConfig.load()
     de_config = de_config or DEConfig.load()
@@ -91,6 +91,25 @@ def run_pipeline(
     suitability = (
         model.predict(planned_meal, profile) if model is not None else planned_evaluation.soft_score
     )
+
+    # Check for Indian food provenance and mark out-of-distribution (OOD)
+    has_indian = any(
+        (rec := db.find(item.food_id)) is not None and rec.is_indian
+        for item in planned_meal.items
+    )
+    if has_indian:
+        is_ood = True
+        prediction_source = "source_aware_adapter"
+        confidence_note = (
+            "Meal contains Indian foods (IFCT 2017 / composite dishes) not in the "
+            "Food.com surrogate training distribution. Evaluated out-of-distribution (OOD) "
+            "with rule engine verification."
+        )
+    else:
+        is_ood = False
+        prediction_source = "surrogate_model" if model is not None else "rule_engine_fallback"
+        confidence_note = None
+
     trace.stage1 = Stage1Result(
         suitability=suitability,
         nutrients=db.nutrients_for(planned_meal),
@@ -98,6 +117,9 @@ def run_pipeline(
         rule_evaluation=planned_evaluation,
         model_name=model.backend if model is not None else "rule_engine_fallback",
         runtime_s=round(time.perf_counter() - stage1_started, 4),
+        is_ood=is_ood,
+        prediction_source=prediction_source,
+        confidence_note=confidence_note,
     )
 
     # --- Stage 2 -----------------------------------------------------------
@@ -115,6 +137,7 @@ def run_pipeline(
                 optimized_meal,
                 planned_evaluation.violations,
                 objective_config.change_epsilon_g,
+                db=db,
             ),
             suitability_before=suitability,
             suitability_after=result.terms.suitability,
@@ -126,6 +149,7 @@ def run_pipeline(
             runtime_s=round(result.runtime_s, 4),
             method="foodsense_de",
             search_space_size=len(space),
+            history=[round(float(h), 5) for h in result.history],
         )
         if not result.valid:
             trace.warnings.append(
@@ -157,6 +181,8 @@ def run_pipeline(
         claimed_nutrients=trace.stage3.claimed_nutrients,
         db=db,
         engine=engine,
+        planned_meal=planned_meal,
+        pantry=pantry_meal,
     )
     trace.stage4 = report
     trace.final_meal = final_meal
@@ -173,7 +199,7 @@ def run_scenario(key: str, **kwargs) -> PipelineTrace:
     from foodsense.scenarios import load_scenario
 
     scenario = load_scenario(key)
-    db = kwargs.pop("db", None) or get_food_db()
+    db = kwargs.pop("db", None) or get_unified_food_db()
     return run_pipeline(
         scenario.profile,
         scenario.planned_meal(db),

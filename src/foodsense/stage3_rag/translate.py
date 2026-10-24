@@ -42,6 +42,7 @@ def build_diff(
     optimized: Meal,
     violations: list[Violation],
     change_epsilon_g: float = 2.0,
+    db: FoodDB | None = None,
 ) -> MealDiff:
     """What changed between two meals, with a reason attached where one exists."""
     planned_by_id = {i.food_id: i for i in planned.items}
@@ -71,6 +72,12 @@ def build_diff(
         name = (after or before).name  # type: ignore[union-attr]
         reason = reason_by_food.get(food_id)
 
+        source = (
+            (after.source if after and after.source else None)
+            or (before.source if before and before.source else None)
+            or (db.find(food_id).source if db and db.find(food_id) else None)
+        )
+
         if before is None and after is not None:
             change_type = "added"
         elif after is None and before is not None:
@@ -94,6 +101,7 @@ def build_diff(
                 old_form=before.form if before else None,
                 new_form=after.form if after else None,
                 reason=reason,
+                source=source,
             )
         )
 
@@ -125,7 +133,7 @@ def translate(
     retriever = retriever or get_retriever()
 
     planned_evaluation = engine.evaluate(planned, profile)
-    diff = diff or build_diff(planned, optimized, planned_evaluation.violations)
+    diff = diff or build_diff(planned, optimized, planned_evaluation.violations, db=db)
 
     # Retrieval is over the *edited* foods: those are the ones the write-up has to
     # name, and the ones a generator would otherwise be tempted to invent.
