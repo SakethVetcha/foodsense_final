@@ -22,7 +22,7 @@ from typing import Any, Protocol
 import numpy as np
 
 from foodsense import MODELS_DIR
-from foodsense.data.fdc import FoodDB, get_food_db
+from foodsense.data.fdc import FoodDB, get_food_db, get_unified_food_db
 from foodsense.schemas import Meal, MealItem, UserProfile
 from foodsense.stage1_prediction.features import feature_names, meal_features
 
@@ -77,7 +77,7 @@ class SuitabilityModel:
 
     @classmethod
     def load(cls, backend: str = "lightgbm", db: FoodDB | None = None) -> SuitabilityModel:
-        db = db or get_food_db()
+        db = db or get_unified_food_db()
         columns, target_score = cls._load_contract()
 
         if backend == "lightgbm":

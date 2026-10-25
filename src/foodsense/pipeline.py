@@ -76,9 +76,19 @@ def run_pipeline(
 
     if model is None:
         try:
-            from foodsense.stage1_prediction.predict import get_suitability_model
+            from foodsense.stage1_prediction.predict import SuitabilityModel, get_suitability_model
 
-            model = get_suitability_model()
+            base_model = get_suitability_model()
+            if base_model.db is not db:
+                model = SuitabilityModel(
+                    booster=base_model.booster,
+                    backend=base_model.backend,
+                    columns=base_model.columns,
+                    target_score=base_model.target_score,
+                    db=db,
+                )
+            else:
+                model = base_model
         except ModelMissingError as exc:
             # Without the surrogate there is no smooth objective to climb, so
             # Stage 2 cannot run. Everything else still can: the rules alone can

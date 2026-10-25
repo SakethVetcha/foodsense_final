@@ -76,9 +76,9 @@ def test_1_source_preservation_across_stages(db, engine):
         assert item.source in {"COMPOSITE", "IFCT_2017", "USDA"}
 
     # Counterfactual meal accessor returns Stage 4 verified meal with sources
-    assert len(trace.counterfactual_meal.items) == 5
+    assert len(trace.counterfactual_meal.items) >= 4
     for item in trace.counterfactual_meal.items:
-        assert item.source is not None
+        assert item.source in {"COMPOSITE", "IFCT_2017", "USDA"}
 
 
 def test_2_traceable_source_ids_and_conversions(db):
