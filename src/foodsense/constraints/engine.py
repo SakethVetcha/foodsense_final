@@ -338,7 +338,7 @@ class RuleEngine:
         return self.evaluate(meal, profile).hard_violations
 
     def is_valid(
-        self, meal: Meal | list[MealItem], profile: UserProfile, target_score: float
+        self, meal: Meal | list[MealItem], profile: UserProfile, target_score: float = 0.70
     ) -> bool:
         """Stage-2 validity: safe, and scoring at least ``target_score``.
 

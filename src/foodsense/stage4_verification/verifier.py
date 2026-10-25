@@ -82,6 +82,7 @@ def verify(
     tolerance: float = DEFAULT_TOLERANCE,
     planned_meal: Meal | None = None,
     pantry: Meal | list[MealItem] | None = None,
+    target_score: float = 0.70,
 ) -> tuple[Meal, VerificationReport]:
     """Verify and repair a generated item list. Returns the final meal and the report."""
     started = time.perf_counter()
@@ -124,6 +125,10 @@ def verify(
                 )
         else:
             report.matched += 1
+            if item.source and item.source != record.source:
+                report.source_notes.append(
+                    f"Provenance discrepancy for '{record.name}' ({record.fdc_id}): declared as {item.source}, but catalog record is {record.source}."
+                )
 
         # Track provenance
         report.sources[record.fdc_id] = record.source
@@ -256,7 +261,16 @@ def verify(
     report.verified_nutrients = db.nutrients_for(verified)
 
     availability_ok = not any(v.rule_id == "verification.availability" for v in report.flagged)
-    report.final_pass = final_evaluation.is_safe and availability_ok and len(report.unverifiable) == 0
+    safety_ok = final_evaluation.is_safe and availability_ok
+    provenance_ok = (len(report.unverifiable) == 0) and (report.matched == report.checked)
+    target_ok = final_evaluation.score >= target_score
+
+    report.safety_passed = safety_ok
+    report.provenance_verified = provenance_ok
+    report.target_attained = target_ok
+    report.target_score = target_score
+    report.final_score = round(final_evaluation.score, 4)
+    report.final_pass = safety_ok and provenance_ok
     report.runtime_s = round(time.perf_counter() - started, 4)
     return Meal(items=verified), report
 

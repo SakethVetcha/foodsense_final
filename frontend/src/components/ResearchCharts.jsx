@@ -38,6 +38,14 @@ export const CHART_PALETTE = {
   border: '#E2E8F0',
 }
 
+export function resolveSource(it) {
+  if (it?.source) return it.source
+  const id = String(it?.food_id || '')
+  if (id.startsWith('X')) return 'COMPOSITE'
+  if (id.startsWith('IF') || /^[A-Z]\d{3}/i.test(id)) return 'IFCT_2017'
+  return 'USDA'
+}
+
 const customTooltipStyle = {
   fontSize: '12px',
   borderRadius: '8px',
@@ -654,7 +662,7 @@ export function FoodSourceCompositionChart({ trace }) {
   // Compute weight contribution by source
   const weightBySource = { IFCT_2017: 0, USDA: 0, COMPOSITE: 0 }
   items.forEach((it) => {
-    const src = it.source || (it.food_id?.startsWith('IF') ? 'IFCT_2017' : 'USDA')
+    const src = resolveSource(it)
     const w = it.quantity_g || 0
     if (src === 'IFCT_2017') weightBySource.IFCT_2017 += w
     else if (src === 'COMPOSITE') weightBySource.COMPOSITE += w

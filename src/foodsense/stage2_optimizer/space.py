@@ -101,6 +101,10 @@ class Variable:
         return self.record.name
 
     @property
+    def source(self) -> str:
+        return self.record.source
+
+    @property
     def planned_form_index(self) -> int:
         try:
             return self.forms.index(self.planned_form)
@@ -174,6 +178,7 @@ class SearchSpace:
                     name=variable.name,
                     quantity_g=quantity,
                     form=variable.forms[index],
+                    source=variable.source,
                 )
             )
         return Meal(items=items)

@@ -62,6 +62,7 @@ class TranslationRequest:
     candidates: dict[str, list[str]] = field(default_factory=dict)
     texture_notes: dict[str, str] = field(default_factory=dict)
     violations_fixed: list[str] = field(default_factory=list)
+    is_valid: bool = True
 
 
 @dataclass(slots=True)
@@ -201,7 +202,16 @@ class TemplateProvider(LLMProvider):
             rationale.append(f"Nutrient calculation data sources: {', '.join(source_labels)}.")
 
         if not lines:
-            lines.append("This meal already meets the targets; no changes are needed.")
+            if request.is_valid:
+                lines.append("This meal already meets the targets; no changes are needed.")
+                if not rationale:
+                    rationale = ["No changes were required; targets are satisfied."]
+            else:
+                lines.append(
+                    "No feasible substitutions or portion adjustments improved target compliance within the available ingredients; baseline planned meal retained."
+                )
+                if not rationale:
+                    rationale = ["No feasible improvement found within available ingredients and bounds."]
 
         items = list(request.optimized_meal.items)
         summary = _summarise(items, notes)
@@ -326,6 +336,7 @@ def parse_response(raw: str, request: TranslationRequest, provider: str) -> Prov
                     name=str(entry["name"]),
                     quantity_g=float(entry["quantity_g"]),
                     form=Form(form) if form in valid_forms else Form.WHOLE,
+                    source=entry.get("source"),
                 )
             )
         except (KeyError, TypeError, ValueError):

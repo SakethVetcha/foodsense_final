@@ -150,6 +150,7 @@ def run_pipeline(
             method="foodsense_de",
             search_space_size=len(space),
             history=[round(float(h), 5) for h in result.history],
+            converged_reason=result.converged_reason,
         )
         if not result.valid:
             trace.warnings.append(
@@ -167,6 +168,7 @@ def run_pipeline(
         engine=engine,
         db=db,
         diff=trace.stage2.diff if trace.stage2 else None,
+        target_score=objective_config.target_score,
     )
     if trace.stage3.fallback_used:
         trace.warnings.append(
@@ -183,6 +185,7 @@ def run_pipeline(
         engine=engine,
         planned_meal=planned_meal,
         pantry=pantry_meal,
+        target_score=objective_config.target_score,
     )
     trace.stage4 = report
     trace.final_meal = final_meal

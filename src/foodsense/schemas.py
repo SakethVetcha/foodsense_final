@@ -498,6 +498,7 @@ class Stage2Result(BaseModel):
     method: str = "foodsense_de"
     search_space_size: int = Field(default=0, description="|planned union pantry|")
     history: list[float] = Field(default_factory=list, description="Per-generation objective trajectory")
+    converged_reason: str = Field(default="", description="Convergence or termination reason")
 
 
 class Stage3Result(BaseModel):
@@ -574,6 +575,11 @@ class VerificationReport(BaseModel):
     safety_fixes: list[SafetyFix] = Field(default_factory=list)
     verified_nutrients: NutrientVector = Field(default_factory=NutrientVector)
     final_pass: bool = False
+    target_attained: bool = Field(default=False, description="True when final rule score meets or exceeds the target")
+    safety_passed: bool = Field(default=True, description="True when no hard-safety or availability violations exist")
+    provenance_verified: bool = Field(default=True, description="True when all food IDs and declared sources exist and match catalog records")
+    target_score: float = Field(default=0.70, description="The target guideline compliance score")
+    final_score: float = Field(default=0.0, description="Final rule engine compliance score")
     runtime_s: float = 0.0
     sources: dict[str, str] = Field(
         default_factory=dict, description="food_id -> provenance (USDA / IFCT_2017 / COMPOSITE)"
@@ -635,3 +641,12 @@ class PipelineTrace(BaseModel):
     @property
     def succeeded(self) -> bool:
         return self.stage4 is not None and self.stage4.final_pass
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def counterfactual_meal(self) -> Meal:
+        if self.final_meal and len(self.final_meal.items) > 0:
+            return self.final_meal
+        if self.stage2 is not None:
+            return self.stage2.optimized_meal
+        return self.planned_meal

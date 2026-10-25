@@ -124,6 +124,7 @@ def translate(
     retriever: FoodRetriever | None = None,
     diff: MealDiff | None = None,
     retrieval_top_k: int = 5,
+    target_score: float = 0.70,
 ) -> Stage3Result:
     """Describe the optimised meal for this profile."""
     started = time.perf_counter()
@@ -160,6 +161,7 @@ def translate(
         candidates=candidates,
         texture_notes=texture_notes,
         violations_fixed=fixed,
+        is_valid=engine.is_valid(optimized, profile, target_score),
     )
     response = provider.generate(request)
 

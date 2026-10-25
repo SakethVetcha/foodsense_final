@@ -29,6 +29,14 @@ import Verification, { Badge } from './Verification'
 // Incorporates unified USDA and IFCT 2017 food composition databases, availability-aware
 // differential evolution, ICMR-NIN single-meal RDA compliance, and multi-source verification.
 
+function resolveSource(it) {
+  if (it?.source) return it.source
+  const id = String(it?.food_id || '')
+  if (id.startsWith('X')) return 'COMPOSITE'
+  if (id.startsWith('IF') || /^[A-Z]\d{3}/i.test(id)) return 'IFCT_2017'
+  return 'USDA'
+}
+
 function MealSummarySideBySide({ plannedMeal, counterfactualMeal }) {
   if (!plannedMeal || !counterfactualMeal) return null
 
@@ -46,18 +54,29 @@ function MealSummarySideBySide({ plannedMeal, counterfactualMeal }) {
           </span>
         </div>
         <ul className="divide-y divide-stone-100 text-xs">
-          {plannedMeal.items?.map((it, i) => (
-            <li key={i} className="py-2 flex items-center justify-between">
-              <div>
-                <span className="font-medium text-stone-800">{it.name}</span>
-                <span className="block text-[11px] text-stone-400">
-                  Form: {it.form || 'whole'} &middot; Source:{' '}
-                  {it.source || (it.food_id?.startsWith('IF') ? 'IFCT_2017' : 'USDA')}
-                </span>
-              </div>
-              <span className="font-mono font-bold text-stone-700">{it.quantity_g?.toFixed(0)}g</span>
-            </li>
-          ))}
+          {plannedMeal.items?.map((it, i) => {
+            const src = resolveSource(it)
+            const srcTone =
+              src === 'IFCT_2017'
+                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                : src === 'COMPOSITE'
+                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                : 'text-sky-700 bg-sky-50 border-sky-200'
+            return (
+              <li key={i} className="py-2 flex items-center justify-between">
+                <div>
+                  <span className="font-medium text-stone-800">{it.name}</span>
+                  <span className="block text-[11px] text-stone-400">
+                    ID: <code className="font-mono text-stone-600">{it.food_id}</code> &middot; Form: {it.form || 'whole'} &middot;{' '}
+                    <span className={`px-1 py-0.2 rounded text-[10px] font-semibold border ${srcTone}`}>
+                      {src}
+                    </span>
+                  </span>
+                </div>
+                <span className="font-mono font-bold text-stone-700">{it.quantity_g?.toFixed(0)}g</span>
+              </li>
+            )
+          })}
         </ul>
       </div>
 
@@ -69,24 +88,33 @@ function MealSummarySideBySide({ plannedMeal, counterfactualMeal }) {
             <h4 className="font-bold text-forest-900 text-sm">Optimized Counterfactual Meal (Stage 4)</h4>
           </div>
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200">
-            Verified Safe &amp; Available
+            Verified Safe &amp; Grounded
           </span>
         </div>
         <ul className="divide-y divide-stone-100 text-xs">
-          {counterfactualMeal.items?.map((it, i) => (
-            <li key={i} className="py-2 flex items-center justify-between">
-              <div>
-                <span className="font-semibold text-stone-900">{it.name}</span>
-                <span className="block text-[11px] text-emerald-700">
-                  Form: <strong className="font-bold">{it.form || 'whole'}</strong> &middot;{' '}
-                  <span className="text-stone-500">
-                    {it.source || (it.food_id?.startsWith('IF') ? 'IFCT_2017' : 'USDA')}
+          {counterfactualMeal.items?.map((it, i) => {
+            const src = resolveSource(it)
+            const srcTone =
+              src === 'IFCT_2017'
+                ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+                : src === 'COMPOSITE'
+                ? 'text-amber-700 bg-amber-50 border-amber-200'
+                : 'text-sky-700 bg-sky-50 border-sky-200'
+            return (
+              <li key={i} className="py-2 flex items-center justify-between">
+                <div>
+                  <span className="font-semibold text-stone-900">{it.name}</span>
+                  <span className="block text-[11px] text-emerald-700">
+                    ID: <code className="font-mono text-stone-600">{it.food_id}</code> &middot; Form: <strong className="font-bold">{it.form || 'whole'}</strong> &middot;{' '}
+                    <span className={`px-1 py-0.2 rounded text-[10px] font-semibold border ${srcTone}`}>
+                      {src}
+                    </span>
                   </span>
-                </span>
-              </div>
-              <span className="font-mono font-bold text-emerald-900">{it.quantity_g?.toFixed(0)}g</span>
-            </li>
-          ))}
+                </div>
+                <span className="font-mono font-bold text-emerald-900">{it.quantity_g?.toFixed(0)}g</span>
+              </li>
+            )
+          })}
         </ul>
       </div>
     </div>
@@ -137,10 +165,11 @@ function IngredientChangeTable({ diff }) {
                   ? 'bg-amber-50 text-amber-800 border-amber-200'
                   : 'bg-stone-50 text-stone-500 border-stone-200'
 
+              const cSource = resolveSource(c)
               const srcTone =
-                c.source === 'IFCT_2017'
+                cSource === 'IFCT_2017'
                   ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-                  : c.source === 'COMPOSITE'
+                  : cSource === 'COMPOSITE'
                   ? 'text-amber-700 bg-amber-50 border-amber-200'
                   : 'text-sky-700 bg-sky-50 border-sky-200'
 
@@ -160,7 +189,7 @@ function IngredientChangeTable({ diff }) {
                   </td>
                   <td className="py-2 px-3">
                     <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded border ${srcTone}`}>
-                      {c.source || (c.food_id?.startsWith('IF') ? 'IFCT_2017' : 'USDA')}
+                      {cSource}
                     </span>
                   </td>
                   <td className="py-2 px-3 text-right font-mono text-stone-600">
@@ -245,7 +274,18 @@ function FourStageDiagnosticsCards({ trace }) {
           </div>
         </div>
         <div className="pt-2 border-t border-stone-100 text-[11px] text-stone-500 space-y-1">
-          <div>Convergence: <span className="font-semibold text-emerald-700">Target Reached ({s2.n_generations} gen)</span></div>
+          <div>
+            Convergence:{' '}
+            {s2.valid ? (
+              <span className="font-semibold text-emerald-700">Target Met ({s2.n_generations} gen)</span>
+            ) : s2.converged_reason === 'plateaued_without_validity' ? (
+              <span className="font-semibold text-amber-700">Plateaued without target ({s2.n_generations} gen)</span>
+            ) : s2.converged_reason === 'max_generations' ? (
+              <span className="font-semibold text-amber-700">Max generations reached ({s2.n_generations} gen)</span>
+            ) : (
+              <span className="font-semibold text-amber-700">Target unmet ({s2.n_generations} gen)</span>
+            )}
+          </div>
           <div>Search space: <span className="font-mono">{s2.search_space_size} available foods</span></div>
           <div>Evaluations: <span className="font-mono">{s2.n_evaluations?.toLocaleString()} runs</span></div>
         </div>
@@ -278,16 +318,27 @@ function FourStageDiagnosticsCards({ trace }) {
       <div className="bg-white border border-stone-200 rounded-xl p-4 shadow-sm space-y-2.5">
         <div className="flex items-center justify-between border-b border-stone-100 pb-2">
           <span className="text-[11px] font-bold text-forest-700 uppercase tracking-wide">Stage 4</span>
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
-            s4.final_pass ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'
-          }`}>
-            {s4.final_pass ? 'PASS' : 'ISSUES DETECTED'}
-          </span>
+          <div className="flex items-center gap-1">
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+              s4.final_pass ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-rose-50 text-rose-800 border-rose-300'
+            }`}>
+              {s4.final_pass ? 'PASS' : 'ISSUES'}
+            </span>
+            <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border ${
+              s4.target_attained ? 'bg-emerald-50 text-emerald-800 border-emerald-300' : 'bg-amber-50 text-amber-800 border-amber-300'
+            }`}>
+              {s4.target_attained ? 'TARGET MET' : 'TARGET UNMET'}
+            </span>
+          </div>
         </div>
         <div className="space-y-1">
           <div className="text-xs text-stone-500">Independent Verification</div>
           <div className="text-xl font-black text-forest-950">
             {s4.matched} / {s4.checked} <span className="text-xs font-normal text-stone-500">items checked</span>
+          </div>
+          <div className="text-[11px] text-stone-600">
+            Safety: <strong className={s4.safety_passed !== false ? 'text-emerald-700' : 'text-rose-700'}>{s4.safety_passed !== false ? 'PASS' : 'FAIL'}</strong> &middot; Target:{' '}
+            <strong className={s4.target_attained ? 'text-emerald-700' : 'text-amber-700'}>{s4.target_attained ? 'MET' : 'UNMET'}</strong>
           </div>
           <div className="text-[11px] text-stone-600">
             Corrections: <strong>{s4.n_corrections || 0}</strong> &middot; Safety fixes: <strong>{s4.safety_fixes?.length || 0}</strong>

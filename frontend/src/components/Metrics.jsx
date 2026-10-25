@@ -21,23 +21,36 @@ function Metric({ label, value, sub, tone = 'plain' }) {
 }
 
 export default function Metrics({ trace }) {
-  const before = trace?.stage1?.rule_evaluation?.score
-  const after = trace?.final_rule_evaluation?.score
+  const ruleBefore = trace?.stage1?.rule_evaluation?.score
+  const ruleAfter = trace?.final_rule_evaluation?.score
+  const mlBefore = trace?.stage1?.suitability
+  const mlAfter = trace?.stage2?.suitability_after
   const diff = trace?.stage2?.diff
   const safe = trace?.final_rule_evaluation?.is_safe
-  const improved = before != null && after != null && after > before
+  const ruleImproved = ruleBefore != null && ruleAfter != null && ruleAfter > ruleBefore
+  const mlImproved = mlBefore != null && mlAfter != null && mlAfter > mlBefore
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-5 divide-x divide-slate-200 border border-slate-200 rounded-lg bg-white">
+    <div className="grid grid-cols-2 md:grid-cols-6 divide-x divide-slate-200 border border-slate-200 rounded-lg bg-white">
       <Metric
-        label="Suitability"
+        label="Rule Score"
         value={
-          before != null && after != null
-            ? `${before.toFixed(2)} → ${after.toFixed(2)}`
+          ruleBefore != null && ruleAfter != null
+            ? `${ruleBefore.toFixed(2)} → ${ruleAfter.toFixed(2)}`
             : '—'
         }
-        sub={improved ? 'improved' : 'unchanged'}
-        tone={improved ? 'good' : 'plain'}
+        sub={ruleImproved ? 'guideline compliance improved' : 'guideline score unchanged'}
+        tone={ruleImproved ? 'good' : 'plain'}
+      />
+      <Metric
+        label="ML Suitability"
+        value={
+          mlBefore != null && mlAfter != null
+            ? `${mlBefore.toFixed(2)} → ${mlAfter.toFixed(2)}`
+            : '—'
+        }
+        sub={mlImproved ? 'surrogate score improved' : 'surrogate score unchanged'}
+        tone={mlImproved ? 'good' : 'plain'}
       />
       <Metric label="Edits" value={diff?.n_items_changed ?? '—'} sub="items changed" />
       <Metric
@@ -47,8 +60,8 @@ export default function Metrics({ trace }) {
       />
       <Metric
         label="Safety"
-        value={safe ? 'safe' : 'unsafe'}
-        sub={safe ? 'no hard rule broken' : 'see warnings'}
+        value={safe ? 'PASS' : 'UNSAFE'}
+        sub={safe ? 'no hard hazard' : 'see warnings'}
         tone={safe ? 'good' : 'bad'}
       />
       <Metric
